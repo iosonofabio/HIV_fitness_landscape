@@ -63,7 +63,6 @@ def get_mu_Abram2010(normalize=True, strand='both'):
 # Script
 if __name__ == '__main__':
 
-    # Parse input args
     parser = argparse.ArgumentParser(
         description='Get mutation rate from Abram2010',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)    
