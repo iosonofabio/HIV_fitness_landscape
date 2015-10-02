@@ -18,11 +18,52 @@ from Bio.Seq import translate
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
-from mutation_rate_Abram2010 import get_mu_Abram2010
 
 
 
 # Functions
+def get_mu_Abram2010(normalize=True, strand='both'):
+    '''Get the mutation rate matrix from Abram 2010'''
+    muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
+
+    muAbram = pd.Series(np.zeros(len(muts)), index=muts, dtype=float)
+    muAbram.name = 'mutation rate Abram 2010'
+
+    if strand in ['fwd', 'both']:
+        muAbram['C->A'] += 14
+        muAbram['G->A'] += 146
+        muAbram['T->A'] += 20
+        muAbram['A->C'] += 1
+        muAbram['G->C'] += 2
+        muAbram['T->C'] += 18
+        muAbram['A->G'] += 29
+        muAbram['C->G'] += 0
+        muAbram['T->G'] += 6
+        muAbram['A->T'] += 3
+        muAbram['C->T'] += 81
+        muAbram['G->T'] += 4
+
+    if strand in ['rev', 'both']:
+        muAbram['C->A'] += 24
+        muAbram['G->A'] += 113
+        muAbram['T->A'] += 32
+        muAbram['A->C'] += 1
+        muAbram['G->C'] += 2
+        muAbram['T->C'] += 25
+        muAbram['A->G'] += 13
+        muAbram['C->G'] += 1
+        muAbram['T->G'] += 8
+        muAbram['A->T'] += 0
+        muAbram['C->T'] += 61
+        muAbram['G->T'] += 0
+
+    if normalize:
+        muAbramAv = 1.3e-5
+        muAbram *= muAbramAv / (muAbram.sum() / 4.0)
+
+    return muAbram
+
+
 def add_binned_column(df, bins, to_bin):
     # FIXME: this works, but is a little cryptic
     df.loc[:, to_bin+'_bin'] = np.minimum(len(bins)-2,
@@ -90,7 +131,9 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
         M[i_from, i_to] = rate
     logM = np.log10(M)
 
-    ax.imshow(logM, interpolation='nearest', cmap=cm.jet)
+    ax.imshow(logM, interpolation='nearest',
+              cmap=cm.jet,
+              vmin=-7.1, vmax=-4.5)
     ax.set_xlim(-0.5, 3.5)
     ax.set_ylim(3.5, -0.5)
     ax.set_xticks([0, 1, 2, 3])
@@ -107,7 +150,7 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
     for mut, rate in mu.iteritems():
         i_from = alphal.index(mut[0])
         i_to = alphal.index(mut[-1])
-        if -6.5 < np.log10(rate) < -5:
+        if -6.4 < np.log10(rate) < -5:
             color = 'black'
         else:
             color = 'white'
