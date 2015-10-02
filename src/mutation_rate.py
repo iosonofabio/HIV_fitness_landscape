@@ -22,7 +22,7 @@ from hivevo.sequence import alpha, alphal
 
 
 # Functions
-def get_mu_Abram2010(normalize=True, strand='both'):
+def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
     '''Get the mutation rate matrix from Abram 2010'''
     muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
 
@@ -57,11 +57,24 @@ def get_mu_Abram2010(normalize=True, strand='both'):
         muAbram['C->T'] += 61
         muAbram['G->T'] += 0
 
-    if normalize:
-        muAbramAv = 1.3e-5
-        muAbram *= muAbramAv / (muAbram.sum() / 4.0)
+    muAbramAv = 1.3e-5
+    # Assuming an even composition of the lacZ substrate
+    nSitesPerNucleotide = 0.25 * muAbram.sum() / muAbramAv
 
-    return muAbram
+    if normalize:
+        muAbram1 = muAbram / nSitesPerNucleotide
+    else:
+        muAbram1 = muAbram
+
+    if not with_std:
+        return muAbram1
+    else:
+        std = np.sqrt(muAbram * (1 - muAbram / nSitesPerNucleotide))
+        if normalize:
+            std /= nSitesPerNucleotide
+
+        return {'mu': muAbram1,
+                'std': std}
 
 
 def add_binned_column(df, bins, to_bin):
@@ -322,7 +335,7 @@ if __name__ == '__main__':
 
     mu = get_mutation_matrix(data)
 
-    if False:
+    if True:
         dmulog10 = mu.copy()
         muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
         for key, _ in dmulog10.iteritems():
@@ -333,7 +346,9 @@ if __name__ == '__main__':
     plot_mutation_rate_matrix(mu, dmulog10=dmulog10)
 
     # Compare to Abram et al 2010
-    muA = get_mu_Abram2010()
-    plot_mutation_rate_matrix(muA)
+    tmp = get_mu_Abram2010(with_std=True)
+    muA = tmp['mu']
+    dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
+    plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
 
-    plot_comparison(mu, muA)
+    plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
