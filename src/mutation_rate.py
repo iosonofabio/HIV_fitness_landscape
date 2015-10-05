@@ -352,3 +352,8 @@ if __name__ == '__main__':
     plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
 
     plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
+
+
+    # Save to file
+    fn = '../data/mutation_rate.pickle'
+    a = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
