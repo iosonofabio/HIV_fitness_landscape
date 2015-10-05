@@ -218,7 +218,7 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
     R = pearsonr(x, y)[0]
     rho = spearmanr(x, y)[0]
 
-    label = 'Pearson r = {0:3.0%}, Spearman r = {1:3.0%}'.format(R, rho)
+    label = 'Pearson r = {0:3.0%},\nSpearman r = {1:3.0%}'.format(R, rho)
 
     ax.errorbar(x, y,
                 xerr=dx, yerr=dy,
