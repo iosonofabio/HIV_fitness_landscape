@@ -1,5 +1,10 @@
-# figures
+# big data
+data/fitness_cost_data.pickle
+
+
+# figures and notes
 figures/*
+notes/*
 
 ### /home/fabio/.gitignore-boilerplates/Global/Linux.gitignore
 

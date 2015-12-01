@@ -107,6 +107,70 @@ def get_fitness_cost(data, mu='muAbram', independent_slope=True):
     return s
 
 
+def get_fitness_cost_mu(data):
+    '''Fit the fitness costs and the mutation rate together'''
+    from scipy.optimize import curve_fit
+
+    # Poor man's version: we fit mu as a linear increase in the most variable
+    # entropy class, then we fix it for all classes. A better version would be
+    # an actual multidimensional minimization, but good enough for now
+    d = (data
+         .loc[data['S_binc'] == data['S_binc'].max()]
+         .loc[:, ['time_binc', 'mut', 'af']]
+         .groupby(['mut', 'time_binc'])
+         .mean()
+         .loc[:, 'af']
+         .unstack('time_binc'))
+
+    mu = {}
+    for mut, datum in d.iterrows():
+        x = np.array(datum.index)
+        y = np.array(datum)
+        m = np.dot(x, y) / np.dot(x, x)
+        mu[mut] = m
+    mu = pd.Series(mu, name='mutation rate, from variable sites')
+
+    # Group by time (binned) and average, then fit nonlinear least squares
+    d = (data
+         .loc[:, ['time_binc', 'S_binc', 'af', 'mut']]
+         .groupby(['mut', 'S_binc', 'time_binc'], as_index=False)
+         .mean()
+         .groupby('S_binc'))
+
+    # x[0] is time, x[1] the mutation rate
+    fun = lambda x, s: x[1] / s * (1 - np.exp(-s * x[0]))
+    s = {}
+    for iS, (S, datum) in enumerate(d):
+        x = np.vstack([np.array(datum['time_binc']), np.array(mu[datum['mut']])])
+        y = np.array(datum['af'])
+
+        s0 = 1e-2 / 10**(iS / 2.0)
+        fit = curve_fit(fun, x, y, [s0])
+        s[S] = fit[0][0]
+    s = pd.Series(s)
+
+    return s, mu
+
+
+
+
+    # x[0] is time, x[1] the mutation rate
+    fun = lambda x, s: x[1] / s * (1 - np.exp(-s * x[0]))
+    s = {}
+    for iS, (S, datum) in enumerate(d):
+        x = np.array(datum[['time_binc', mu]]).T
+        y = np.array(datum['af'])
+
+        ind = np.array(datum[mu] > 1e-5)
+        x = x[:, ind]
+        y = y[ind]
+
+        s0 = 1e-2 / 10**(iS / 2.0)
+        fit = curve_fit(fun, x, y, [s0])
+        s[S] = fit[0][0]
+    s = pd.Series(s)
+
+
 def plot_fits_allmutations(data, s, mu):
     '''Plot the fit curves for all mutations'''
     from matplotlib import cm
@@ -157,12 +221,18 @@ def plot_fits_allmutations(data, s, mu):
                     xfit = np.linspace(0, x.max())
                     yfit = fun(xfit, s.iloc[iS])
                     ax.plot(xfit, yfit, lw=2, color=colors[iS], alpha=0.5)
+
             else:
                 fun = lambda t, s1, s2: mu[mut] / s1 * (1 - np.exp(-s2 * t))
                 for iS in xrange(d.ngroups):
                     xfit = np.linspace(0, x.max())
                     yfit = fun(xfit, s.iloc[iS]['s1'], s.iloc[iS]['s2'])
                     ax.plot(xfit, yfit, lw=2, color=colors[iS], alpha=0.5)
+
+            # Pure mutation rate accumulation
+            xfit = np.linspace(0, 3000)
+            yfit = mu[mut] * xfit
+            ax.plot(xfit, yfit, lw=2, color='grey', alpha=0.7)
 
 
     ax = axs[-1, 0]
@@ -415,7 +485,13 @@ if __name__ == '__main__':
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
 
+    mu = data.loc[:, ['mut', 'mu']].groupby('mut').mean()['mu']
+    muA = data.loc[:, ['mut', 'muAbram']].groupby('mut').mean()['muAbram']
+
     s = get_fitness_cost(data)
+
+    s, mu = get_fitness_cost_mu(data)
+    sys.exit()
 
     if False:
         ds = s.copy()
@@ -425,6 +501,4 @@ if __name__ == '__main__':
     else:
         ds = None
 
-    mu = data.loc[:, ['mut', 'mu']].groupby('mut').mean()['mu']
-    muA = data.loc[:, ['mut', 'muAbram']].groupby('mut').mean()['muAbram']
     plot_fitness_cost(data, s, mu, ds=ds)
