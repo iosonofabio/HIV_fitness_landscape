@@ -7,6 +7,7 @@ content:    Make figure for the mutation rate.
 # Modules
 import os
 import sys
+import argparse
 from itertools import izip
 import numpy as np
 import pandas as pd
@@ -18,6 +19,8 @@ from Bio.Seq import translate
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
+
+from util import add_binned_column, boot_strap_patients
 
 
 
@@ -75,36 +78,6 @@ def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
 
         return {'mu': muAbram1,
                 'std': std}
-
-
-def add_binned_column(df, bins, to_bin):
-    # FIXME: this works, but is a little cryptic
-    df.loc[:, to_bin+'_bin'] = np.minimum(len(bins)-2,
-                                          np.maximum(0,np.searchsorted(bins, df.loc[:,to_bin])-1))
-
-
-def boot_strap_patients(df, eval_func, columns=None,  n_bootstrap=100):
-    import pandas as pd
-
-    if columns is None:
-        columns = df.columns
-    if 'pcode' not in columns:
-        columns = list(columns)+['pcode']
-
-    patients = df.loc[:,'pcode'].unique()
-    tmp_df_grouped = df.loc[:,columns].groupby('pcode')
-    npats = len(patients)
-    replicates = []
-    for i in xrange(n_bootstrap):
-        if (i%20==0): print("Bootstrap",i)
-        pats = patients[np.random.randint(0,npats, size=npats)]
-        bs = []
-        for pi,pat in enumerate(pats):
-            bs.append(tmp_df_grouped.get_group(pat))
-            bs[-1]['pcode']='BS'+str(pi+1)
-        bs = pd.concat(bs)
-        replicates.append(eval_func(bs))
-    return replicates
 
 
 def get_mutation_matrix(data):
@@ -222,7 +195,7 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
 
     ax.errorbar(x, y,
                 xerr=dx, yerr=dy,
-                ls='o',
+                ls='none',
                 ms=10,
                 marker='o',
                 label=label)
@@ -245,6 +218,8 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
 
     plt.ion()
     plt.show()
+
+    return ax
 
 
 def collect_data(patients, cov_min=100):
@@ -286,9 +261,11 @@ def collect_data(patients, cov_min=100):
                 if fead['RNA']:
                     continue
 
-                # Keep only high-entropy sites
+                # Keep only sites which are also in the reference
                 if pos not in comap.index:
                     continue
+
+                # Keep only high-entropy sites
                 S_pos = ref.entropy[comap.loc[pos]]
                 if S_pos < 0.01:
                     continue
@@ -323,25 +300,31 @@ def collect_data(patients, cov_min=100):
 # Script
 if __name__ == '__main__':
 
-    patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
-    cov_min = 100
+    parser = argparse.ArgumentParser(description='Mutation rate')
+    parser.add_argument('--regenerate', action='store_true',
+                        help="regenerate data")
+    args = parser.parse_args()
 
-    data = collect_data(patients, cov_min=cov_min)
+    fn = 'data/mutation_rate_data.pickle'
+    if not os.path.isfile(fn) or args.regenerate:
+        patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
+        cov_min = 100
+        data = collect_data(patients, cov_min=cov_min)
+        data.to_pickle(fn)
+    else:
+        data = pd.read_pickle(fn)
 
+    # Make time bins
     t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
 
     mu = get_mutation_matrix(data)
-
-    if True:
-        dmulog10 = mu.copy()
-        muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
-        for key, _ in dmulog10.iteritems():
-            dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
-    else:
-        dmulog10 = None
+    dmulog10 = mu.copy()
+    muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
+    for key, _ in dmulog10.iteritems():
+        dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
 
     plot_mutation_rate_matrix(mu, dmulog10=dmulog10)
 

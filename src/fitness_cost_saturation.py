@@ -20,45 +20,17 @@ from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
 
+from util import add_binned_column, boot_strap_patients
+
 
 
 # Functions
 def load_mutation_rates():
-    fn = '../data/mutation_rate.pickle'
+    fn = 'data/mutation_rate.pickle'
     return pd.read_pickle(fn)
 
 
-def add_binned_column(df, bins, to_bin):
-    # FIXME: this works, but is a little cryptic
-    df.loc[:, to_bin+'_bin'] = np.minimum(len(bins)-2,
-                                          np.maximum(0,np.searchsorted(bins, df.loc[:,to_bin])-1))
-
-
-def boot_strap_patients(df, eval_func, columns=None,  n_bootstrap=100):
-    import pandas as pd
-
-    if columns is None:
-        columns = df.columns
-    if 'pcode' not in columns:
-        columns = list(columns)+['pcode']
-
-    patients = df.loc[:,'pcode'].unique()
-    tmp_df_grouped = df.loc[:,columns].groupby('pcode')
-    npats = len(patients)
-    replicates = []
-    for i in xrange(n_bootstrap):
-        if (i%20==0): print("Bootstrap",i)
-        pats = patients[np.random.randint(0,npats, size=npats)]
-        bs = []
-        for pi,pat in enumerate(pats):
-            bs.append(tmp_df_grouped.get_group(pat))
-            bs[-1]['pcode']='BS'+str(pi+1)
-        bs = pd.concat(bs)
-        replicates.append(eval_func(bs))
-    return replicates
-
-
-def get_fitness_cost(data, mu='muAbram', independent_slope=True):
+def fit_fitness_cost(data, mu='muAbram', independent_slope=True):
     '''Get fitness costs from the data'''
     # Group by time (binned) and average, then fit nonlinear least squares
     d = (data
@@ -107,7 +79,7 @@ def get_fitness_cost(data, mu='muAbram', independent_slope=True):
     return s
 
 
-def get_fitness_cost_mu(data):
+def fit_fitness_cost_mu(data):
     '''Fit the fitness costs and the mutation rate together'''
     from scipy.optimize import curve_fit
 
@@ -152,8 +124,6 @@ def get_fitness_cost_mu(data):
     return s, mu
 
 
-
-
     # x[0] is time, x[1] the mutation rate
     fun = lambda x, s: x[1] / s * (1 - np.exp(-s * x[0]))
     s = {}
@@ -171,7 +141,7 @@ def get_fitness_cost_mu(data):
     s = pd.Series(s)
 
 
-def plot_fits_allmutations(data, s, mu):
+def plot_fits_4x4(data, s, mu):
     '''Plot the fit curves for all mutations'''
     from matplotlib import cm
     sns.set_style('darkgrid')
@@ -458,6 +428,70 @@ def collect_data(patients, cov_min=100):
     return data
 
 
+def cross_check_mu(data):
+    '''Estimate the mutation rate from the high-entropy class'''
+    from mutation_rate import get_mutation_matrix, plot_comparison
+
+    # Get other estimate and Abram 2010
+    tmp = load_mutation_rates()
+    muO = tmp['mu']
+    dmuOlog10 = tmp['dmulog10']
+    muA = tmp['muA']
+    dmuAlog10 = tmp['dmuAlog10']
+
+    # Only high entropy
+    data_mu = data.loc[data['S_binc'] == S_binc[-1]].copy()
+    mu = get_mutation_matrix(data_mu)
+    ax = plot_comparison(mu, muO, dmulog10=None, dmuAlog10=dmuOlog10)
+    ax.set_title('Only high-entropy')
+    ax.set_ylabel('Direct estimate of ours')
+
+    # High entropy and synonymous
+    data_mu = data.loc[((data['S_binc'] == S_binc[-1]) &
+                        (data['syn'] == True))].copy()
+    mu = get_mutation_matrix(data_mu)
+    ax = plot_comparison(mu, muO, dmulog10=None, dmuAlog10=dmuOlog10)
+    ax.set_title('Only high-entropy AND synonymous')
+    ax.set_ylabel('Direct estimate of ours')
+
+    # See what happens for high-S, nonsynonymous sites: are they sweeps
+    for iS in [-1, -2, -3]:
+        dataS = data.loc[((data['S_binc'] == S_binc[iS]) &
+                            (data['syn'] == False))].copy()
+        g = (dataS.loc[:, ['af', 'time', 'pcode', 'pos_ref', 'mut']]
+             .groupby(['pcode', 'pos_ref', 'mut']))
+
+        n_fix = 0
+        fig, ax = plt.subplots()
+        for (pcode, pos, mut), datum in g:
+            x = np.array(datum['time'])
+            y = np.array(datum['af'])
+            if (y > 0).any():
+                ax.plot(x, y, lw=2)
+
+            if (y > 0.8).any():
+                n_fix += 1
+
+
+        ax.set_xlabel('Time [days since EDI]')
+        ax.set_ylabel('$\\nu$')
+        if iS == -1:
+            label = 'Highest'
+        elif iS == -2:
+            label = '2nd-highest'
+        elif iS == -3:
+            label = '3rd-highest'
+        else:
+            label = str(-iS)+'th highest'
+        label += ' entropy, N fix: '+str(n_fix)+' out of '+str(g.ngroups)
+        print label
+        ax.set_title(label)
+
+    plt.ion()
+    plt.show()
+
+
+
 
 # Script
 if __name__ == '__main__':
@@ -467,14 +501,16 @@ if __name__ == '__main__':
                         help="regenerate data")
     args = parser.parse_args()
 
-    if args.regenerate:
+    fn = 'data/fitness_cost_data.pickle'
+    if not os.path.isfile(fn) or args.regenerate:
         patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
         cov_min = 100
         data = collect_data(patients, cov_min=cov_min)
-        data.to_pickle('../data/fitness_cost_data.pickle')
+        data.to_pickle(fn)
     else:
-        data = pd.read_pickle('../data/fitness_cost_data.pickle')
+        data = pd.read_pickle(fn)
 
+    # Make time and entropy bins
     t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
@@ -485,17 +521,23 @@ if __name__ == '__main__':
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
 
+    # As a cross check, estimate the mutation rate from the high-entropy class
+    cross_check_mu(data)
+
+    sys.exit()
+
+    # Set mutation rates
     mu = data.loc[:, ['mut', 'mu']].groupby('mut').mean()['mu']
     muA = data.loc[:, ['mut', 'muAbram']].groupby('mut').mean()['muAbram']
 
-    s = get_fitness_cost(data)
+    s = fit_fitness_cost(data)
 
-    s, mu = get_fitness_cost_mu(data)
+    s, mu = fit_fitness_cost_mu(data)
     sys.exit()
 
     if False:
         ds = s.copy()
-        sBS = boot_strap_patients(data, get_fitness_cost, n_bootstrap=100)
+        sBS = boot_strap_patients(data, fit_fitness_cost, n_bootstrap=100)
         for key, _ in s.iteritems():
             ds[key] = np.std([tmp[key] for tmp in sBS])
     else:
