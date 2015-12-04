@@ -2,7 +2,7 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure for the mutation rate.
+content:    Make figure for the fitness cost estimate from the saturation curves.
 '''
 # Modules
 import os
@@ -348,9 +348,9 @@ def plot_fitness_cost(data, s, mu, ds=None, mut='A->G', savefig=False):
     plt.show()
 
 
-def collect_data(patients, cov_min=100):
+def collect_data(patients, cov_min=100, no_sweeps=False, refname='HXB2'):
     '''Collect data for the fitness cost estimate'''
-    ref = HIVreference(load_alignment=False)
+    ref = HIVreference(refname=refname, subtype='any', load_alignment=True)
     mus = load_mutation_rates()
     mu = mus.mu
     muA = mus.muA
@@ -360,14 +360,12 @@ def collect_data(patients, cov_min=100):
         print pcode
 
         p = Patient.load(pcode)
-        comap = (pd.DataFrame(p.map_to_external_reference('genomewide')[:, :2],
-                              columns=['HXB2', 'patient'])
+        comap = (pd.DataFrame(p.map_to_external_reference('genomewide', refname=refname)[:, :2],
+                              columns=[refname, 'patient'])
                    .set_index('patient', drop=True)
-                   .loc[:, 'HXB2'])
+                   .loc[:, refname])
 
         aft = p.get_allele_frequency_trajectories('genomewide', cov_min=cov_min)
-        times = p.dsi
-
         for pos, aft_pos in enumerate(aft.swapaxes(0, 2)):
             fead = p.pos_to_feature[pos]
 
@@ -382,16 +380,32 @@ def collect_data(patients, cov_min=100):
             if '-' in cod_anc:
                 continue
 
+            # Keep only nonmasked times
+            if aft_pos[:4].mask.any(axis=0).all():
+                continue
+            else:
+                ind = ~aft_pos[:4].mask.any(axis=0)
+                times = p.dsi[ind]
+                aft_pos = aft_pos[:, ind]
+
+            # Get site entropy
+            if pos not in comap.index:
+                continue
+            pos_ref = comap.loc[pos]
+            S_pos = ref.entropy[pos_ref]
+
+            # Keep only sites where the ancestral allele and group M agree
+            if ref.consensus_indices[pos_ref] != aft_pos[:, 0].argmax():
+                continue
+
             for ia, aft_nuc in enumerate(aft_pos[:4]):
                 # Keep only derived alleles
                 if alpha[ia] == p.initial_sequence[pos]:
                     continue
 
-                # Get site entropy
-                if pos not in comap.index:
+                # Filter out sweeps if so specified
+                if no_sweeps and (aft_nuc > 0.5).any():
                     continue
-                pos_ref = comap.loc[pos]
-                S_pos = ref.entropy[pos_ref]
 
                 # Annotate with syn/nonsyn alleles
                 cod_new = cod_anc[:pc] + alpha[ia] + cod_anc[pc+1:]
@@ -405,10 +419,6 @@ def collect_data(patients, cov_min=100):
                 muA_pos = muA[mut]
 
                 for it, (t, af_nuc) in enumerate(izip(times, aft_nuc)):
-                    # Keep only nonmasked times
-                    if aft_nuc.mask[it]:
-                        continue
-
                     datum = {'time': t,
                              'af': af_nuc,
                              'pos': pos,
@@ -445,6 +455,14 @@ def cross_check_mu(data):
     ax = plot_comparison(mu, muO, dmulog10=None, dmuAlog10=dmuOlog10)
     ax.set_title('Only high-entropy')
     ax.set_ylabel('Direct estimate of ours')
+
+    # Difference
+    ax = plot_comparison(mu - muO, muO, dmulog10=None, dmuAlog10=dmuOlog10)
+    ax.set_title('Only high-entropy')
+    ax.set_ylabel('Direct estimate of ours')
+    ax.set_xlabel('Additional slope')
+
+    return
 
     # High entropy and synonymous
     data_mu = data.loc[((data['S_binc'] == S_binc[-1]) &
@@ -499,16 +517,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Fitness cost')
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data")
+    parser.add_argument('--no-sweeps', action='store_true',
+                        help='Exclude sweeps from the data collection')
     args = parser.parse_args()
 
     fn = 'data/fitness_cost_data.pickle'
+    if args.no_sweeps:
+        fn = fn.split('.')[0]+'_nosweep.pickle'
     if not os.path.isfile(fn) or args.regenerate:
         patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
         cov_min = 100
-        data = collect_data(patients, cov_min=cov_min)
+        data = collect_data(patients, cov_min=cov_min, no_sweeps=args.no_sweeps)
         data.to_pickle(fn)
     else:
         data = pd.read_pickle(fn)
+    sys.exit()
 
     # Make time and entropy bins
     t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
@@ -530,9 +553,9 @@ if __name__ == '__main__':
     mu = data.loc[:, ['mut', 'mu']].groupby('mut').mean()['mu']
     muA = data.loc[:, ['mut', 'muAbram']].groupby('mut').mean()['muAbram']
 
-    s = fit_fitness_cost(data)
+    s = fit_fitness_cost(dataS)
 
-    s, mu = fit_fitness_cost_mu(data)
+    s, mu = fit_fitness_cost_mu(dataS)
     sys.exit()
 
     if False:
