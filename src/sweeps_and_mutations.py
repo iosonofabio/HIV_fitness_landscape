@@ -65,7 +65,6 @@ def nonsyn_chances():
     return chances
 
 
-
 def collect_data(patients, cov_min=100, refname='HXB2'):
     '''Collect data for the fitness cost estimate'''
     ref = HIVreference(refname=refname, subtype='any', load_alignment=True)
@@ -172,6 +171,33 @@ def plot_sweeps(data):
     plt.show()
 
 
+def plot_fraction_sweeps_entropy_mut(nu_sweep):
+    from matplotlib import cm
+    cmap = cm.jet
+
+    fig, ax = plt.subplots()
+    for i, (mut, tmp) in enumerate(nu_sweep.iterrows()):
+        x = np.array(tmp.index)
+        y = np.array(tmp)
+        color = cm.jet(1.0 * i / nu_sweep.shape[0])
+        ax.plot(x, y, label=mut, lw=2, color=color)
+
+    for xtmp in x:
+        ax.annotate('', xy=(xtmp, 0.9), xytext=(xtmp, 0.99),
+                    arrowprops=dict(facecolor='black', shrink=0.05))
+
+    ax.legend(bbox_to_anchor=(0.32, 0.8),
+              bbox_transform=ax.transAxes,
+              ncol=2)
+    ax.set_xlabel('Sbinc')
+    ax.set_ylabel('Fraction of sweeps')
+    ax.set_xscale('log')
+    ax.set_ylim(0, 1)
+    ax.set_xlim(0.9 * x.min(), 1.1 * x.max())
+
+    plt.ion()
+    plt.show()
+
 
 
 # Script
@@ -197,11 +223,26 @@ if __name__ == '__main__':
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
 
-    S_bins = np.percentile(data['S'], np.linspace(0, 100, 8))
-    S_binc = 0.5 * (S_bins[:-1] + S_bins[1:])
+    # Entropy binning based on quantiles of ALL alleles (not only sweeps!)
+    fnS = 'data/fitness_cost_data_nosweep_Sbins.npz'
+    S_bins = np.load(fnS)['bins']
+    S_binc = np.load(fnS)['binc']
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
 
+    # Number alleles in each entropy bin for each mutation, to adjust the initial
+    # slope of the fitness cost fits
+    nu_sweep = data.loc[:, ['pos', 'pcode', 'af', 'S_binc', 'mut']].groupby(['mut', 'S_binc']).count()['af'].unstack().fillna(0)
+    # Pseudocounts
+    nu_sweep += 1
+    # Normalize
+    nu_sweep = (nu_sweep.T / nu_sweep.T.sum(axis=0)).T
+    fn_sw = 'data/fraction_sweep_entropy_mut.pickle'
+    nu_sweep.to_pickle(fn_sw)
+
+    plot_fraction_sweeps_entropy_mut(nu_sweep)
+
+    sys.exit()
 
     # Group single trajectories
     nMu = (data.loc[data['syn'] == False]
@@ -213,6 +254,8 @@ if __name__ == '__main__':
 
     mu = load_mutation_rates()['mu']
     frac = nonsyn_chances()
+
+    sys.exit()
 
     # The null expectation is that we have frac(A) * mu(A->G) / sum() sweeps
     nNull = frac * mu
