@@ -42,56 +42,6 @@ def interpolate_slope(mu, muNS, nu):
     return muNS + (nu < theta) * (mu - muNS)
 
 
-
-def fit_fitness_cost(data, mu='muAbram', independent_slope=True):
-    '''Get fitness costs from the data'''
-    # Group by time (binned) and average, then fit nonlinear least squares
-    d = (data
-         .loc[:, ['time_binc', 'S_binc', mu, 'af']]
-         .groupby([mu, 'S_binc', 'time_binc'], as_index=False)
-         .mean()
-         .groupby('S_binc'))
-
-    from scipy.optimize import curve_fit
-    if not independent_slope:
-        # x[0] is time, x[1] the mutation rate
-        fun = lambda x, s: x[1] / s * (1 - np.exp(-s * x[0]))
-        s = {}
-        for iS, (S, datum) in enumerate(d):
-            x = np.array(datum[['time_binc', mu]]).T
-            y = np.array(datum['af'])
-
-            ind = np.array(datum[mu] > 1e-5)
-            x = x[:, ind]
-            y = y[ind]
-
-            s0 = 1e-2 / 10**(iS / 2.0)
-            fit = curve_fit(fun, x, y, [s0])
-            s[S] = fit[0][0]
-        s = pd.Series(s)
-    else:
-        # x[0] is time, x[1] the mutation rate
-        fun = lambda x, s1, s2: x[1] / s1 * (1 - np.exp(-s2 * x[0]))
-        s = {}
-        for iS, (S, datum) in enumerate(d):
-            x = np.array(datum[['time_binc', mu]]).T
-            y = np.array(datum['af'])
-
-            ind = np.array(datum[mu] > 1e-5)
-            x = x[:, ind]
-            y = y[ind]
-
-            s0 = 1e-2 / 10**(iS / 2.0)
-            fit = curve_fit(fun, x, y, [s0, s0])
-            s[S] = {'s1': fit[0][0], 's2': fit[0][1]}
-        s = pd.DataFrame(s).T
-
-    s.index.name = 'Subtype entropy'
-    s.name = 'Fitness cost'
-
-    return s
-
-
 def fit_mu_highentropy(data):
     '''An estimate of the high-entropy initial slope is necessary since we exclude sweeps'''
     from mutation_rate import get_mutation_matrix, plot_comparison
@@ -120,8 +70,8 @@ def compare_mu(mu, plot=False):
 
     if plot:
         ax = plot_comparison(mu, muO, dmulog10=None, dmuAlog10=dmuOlog10)
-        ax.set_title('Only high-entropy')
-        ax.set_ylabel('Direct estimate of ours')
+        ax.set_ylabel('Direct estimate of ours [changes/day]')
+        ax.set_xlabel('Estimate without sweeps [changes/day]')
         x = np.linspace(-7.5, -4, 100)
         y = x - np.log10(alpha)
         ax.plot(x, y, lw=2, color='red',
@@ -134,11 +84,13 @@ def compare_mu(mu, plot=False):
 def prepare_data_for_fit(data, plot=False):
     '''Prepare the data for fit by averaging single allele frequencies'''
     def plot_bins(counter):
+        fs = 14
         fig, ax = plt.subplots()
         h, bins = np.histogram(counter, bins=10)
         for i in xrange(len(h)):
             ax.bar(bins[i], h[i], bins[i+1] - bins[i])
-        ax.set_xlabel('# points in average frequency')
+        ax.set_xlabel('number of allele in each frequency average', fontsize=fs)
+        ax.set_xlabel('number of averages', fontsize=fs)
         cmin = counter.min()
         cmax = counter.max()
         ax.annotate('min = '+str(int(cmin)),
@@ -153,6 +105,14 @@ def prepare_data_for_fit(data, plot=False):
                     va='center',
                     fontsize=18,
                    )
+        ax.xaxis.set_tick_params(labelsize=fs)
+        ax.yaxis.set_tick_params(labelsize=fs)
+        ax.text(0.98, 0.95,
+                'n. averages = 5 times x 6 entropies x 12 muts',
+                ha='right',
+                va='top',
+                transform=ax.transAxes)
+
         plt.ion()
         plt.show()
 
@@ -222,7 +182,6 @@ def fit_fitness_cost_interpmu(data_to_fit, mu,
     d = data_to_fit.groupby(level='S_binc')
 
     # x[0] is time, x[1] the mutation rate
-    #fig, ax = plt.subplots()
     s = []
     for iS, (S, datum) in enumerate(d):
         mut = datum['mut']
@@ -246,28 +205,6 @@ def fit_fitness_cost_interpmu(data_to_fit, mu,
                   'ds': np.sqrt(fit[1][0, 0]),
                  })
 
-        if False:
-            from matplotlib import cm
-            mut = 'C->T'
-            dd = datum.loc[datum['mut'] == mut]
-            x = np.array(dd['time_binc'])
-            y = np.array(dd['af'])
-            dy = np.array(dd['af_std'])
-            y2 = np.array(dd['af'])
-            ax.errorbar(x, y,
-                        yerr=dy, lw=2,
-                        color=cm.jet(1.0 * iS / 6))
-            ax.plot(x, y2, lw=2, ls='--',
-                    color=cm.jet(1.0 * iS / 6))
-
-            #xfit = np.linspace(0, 3000)
-            #xx = np.vstack([xfit, np.repeat(mu_tmp.loc[mut].iloc[0], len(xfit))])
-            #yfit = fun(xx, fit[0][0])
-            #ax.plot(xfit, yfit, lw=2,
-            #        color=cm.jet(1.0 * iS / 6))
-
-            #import ipdb; ipdb.set_trace()
-
     s = pd.DataFrame(s).set_index('S', inplace=False, drop=True)
     s.index.name = 'entropy'
     s.name = 'fitness cost'
@@ -275,81 +212,64 @@ def fit_fitness_cost_interpmu(data_to_fit, mu,
     return s
 
 
-def fit_fitness_cost_mu(data, alpha=None):
-    '''Fit the fitness costs and the mutation rate together
+def fit_fitness_cost_interpmu_permu(data_to_fit, mu,
+                              muNS,
+                              nu_sweep_norm):
+    '''Fit the fitness costs with an interpolated initial slope
     
     The rationale for this is that the simple fit
+
         <nu> (t) = mu / s * (1 - exp[-s t])
+
     does not work because of selective sweeps. After filtering out
     fixing sites this estimate of mu becomes somewhat proportional, but lower
     than the actual mutation rate (it is expected, we are removing some
-    successful hitchhikers).
-    
-    Of course, only after a sensible estimate of the initial linear increase does
-    the saturation fit make any sense, so we fit both here (the space of
-    parameters is the CARTESIAN product, not the TENSOR product, so we have 12
-    more parameters only).
+    successful hitchhikers): the ratio is around 0.4.
+
+    Because the exclusion of sweeps affects mostly high-entropy classes, we
+    interpolate between the actual mutation rate 'mu' and the lower-proportional
+    'muNS' according to entropy class (low-S -> mu, high-S -> muNS). The exact
+    nature of the interpolation is not known, but it does not make a huge difference
+    because alpha is relatively close to 1.
+
+    In this version, we fit a fitness coefficient per entropy per mutation.
     '''
     from scipy.optimize import curve_fit
 
-    # Poor man's version: we fit mu as a linear increase in the most variable
-    # entropy class, then we fix it for all classes. A better version would be
-    # an actual multidimensional minimization, but that would also require
-    # legitimate error bars on rare frequencies, which we are not providing really
-    d = (data
-         .loc[data['S_binc'] == data['S_binc'].max()]
-         .loc[:, ['time_binc', 'mut', 'af']]
-         .groupby(['mut', 'time_binc'])
-         .mean()
-         .loc[:, 'af']
-         .unstack('time_binc'))
+    data_to_fit = data_to_fit.copy()
+    data_to_fit['time_binc'] = data_to_fit.index.get_level_values('time_binc')
+    d = data_to_fit.groupby(level=['mut', 'S_binc'])
 
-    mu = {}
-    for mut, datum in d.iterrows():
-        x = np.array(datum.index)
-        y = np.array(datum)
-        m = np.dot(x, y) / np.dot(x, x)
-        mu[mut] = m
-    mu = pd.Series(mu, name='mutation rate, from variable sites')
+    Sall = nu_sweep_norm.columns.tolist()
 
-    # Group by time (binned) and average, then fit nonlinear least squares
-    d = (data
-         .loc[:, ['time_binc', 'S_binc', 'af', 'mut']]
-         .groupby(['mut', 'S_binc', 'time_binc'], as_index=False)
-         .mean()
-         .groupby('S_binc'))
+    s = []
+    for (mut, S), datum in d:
+        iS = Sall.index(S)
+        nu_sweep_tmp = nu_sweep_norm.loc[mut, S]
 
-    # x[0] is time, x[1] the mutation rate
-    s = {}
-    for iS, (S, datum) in enumerate(d):
-        x = np.vstack([np.array(datum['time_binc']), np.array(mu[datum['mut']])])
+        # Decrease initial slope by linear interpolation of the bias due to
+        # exclusion of sweeps, anchored at the high-entropy class
+        mu_tmp = interpolate_slope(mu[mut], muNS[mut], nu_sweep_tmp)
+
+        x =np.array(datum['time_binc'])
         y = np.array(datum['af'])
+        dy = np.array(datum['af_std'])
+
         s0 = 1e-2 / 10**(iS / 2.0)
-        fun = lambda x, s: 1.0 / al * x[1] / s * (1 - np.exp(-s * x[0]))
-        fit = curve_fit(fun, x, y, [s0])
-        s[S] = fit[0][0]
-    s = pd.Series(s)
-    s.index.name = 'entropy'
+        fun = lambda x, s: mu_tmp / s * (1 - np.exp(-s * x))
+        fit = curve_fit(fun, x, y, p0=[s0], sigma=dy, absolute_sigma=False)
+        s.append({'S': S,
+                  's': fit[0][0],
+                  'ds': np.sqrt(fit[1][0, 0]),
+                  'mut': mut,
+                 })
+
+    s = pd.DataFrame(s).set_index(['S', 'mut'], inplace=False, drop=True)
+    s.index.name = 'entropy and mutation'
     s.name = 'fitness cost'
+    s = s.to_panel().transpose(0, 2, 1)
 
-    return s, mu
-
-
-    # x[0] is time, x[1] the mutation rate
-    fun = lambda x, s: x[1] / s * (1 - np.exp(-s * x[0]))
-    s = {}
-    for iS, (S, datum) in enumerate(d):
-        x = np.array(datum[['time_binc', mu]]).T
-        y = np.array(datum['af'])
-
-        ind = np.array(datum[mu] > 1e-5)
-        x = x[:, ind]
-        y = y[ind]
-
-        s0 = 1e-2 / 10**(iS / 2.0)
-        fit = curve_fit(fun, x, y, [s0])
-        s[S] = fit[0][0]
-    s = pd.Series(s)
+    return s
 
 
 def plot_fits_4x4(data, s, mu):
@@ -430,53 +350,6 @@ def plot_fits_4x4(data, s, mu):
     plt.tight_layout()
     plt.ion()
     plt.show()
-
-
-def fit_all_transitions(data):
-    from scipy.optimize import curve_fit
-    res = []
-    muts = ['A->G', 'G->A', 'C->T', 'T->C']
-    for mut in muts:
-        d = (data.groupby('mut')
-             .get_group(mut)
-             .loc[:, ['time_binc', 'S_binc', 'af']]
-             .groupby(['S_binc', 'time_binc'], as_index=False)
-             .mean()
-             .groupby('S_binc'))
-
-        #from matplotlib import cm
-        #fig, ax = plt.subplots()
-        #ax.set_title(mut)
-        #ax.set_xlabel('Time since EDI [days]')
-        #ax.set_ylim(0, 0.008)
-        #xfit = np.linspace(0, 3000, 200)
-
-        for iS, (S, datum) in enumerate(d):
-            x = np.array(datum['time_binc'])
-            y = np.array(datum['af'])
-
-            fun = lambda x, s, mu: mu / s * (1 - np.exp(-s * x))
-            s0 = 1e-3 / 10**(iS / 4.0)
-            mu0 = 3e-6
-            fit = curve_fit(fun, x, y, [s0, mu0])
-            stmp = fit[0][0]
-            mutmp = fit[0][1]
-
-            #yfit = fun(xfit, stmp, mutmp)
-            #ax.scatter(x, y, lw=2, color=cm.jet(1.0 * iS / 7))
-            #ax.plot(xfit, yfit, lw=2, color=cm.jet(1.0 * iS / 7))
-
-            res.append({'mut': mut,
-                        'S': S,
-                        'mu': mutmp,
-                        's': stmp})
-
-        #plt.ion()
-        #plt.show()
-        #import ipdb; ipdb.set_trace()
-
-    res = pd.DataFrame(res).set_index(['S', 'mut'], inplace=False, drop=True)
-    return res['s'].unstack(), res['mu'].unstack()
 
 
 def plot_fitness_cost(data_to_fit,
@@ -615,6 +488,65 @@ def plot_fitness_cost(data_to_fit,
         for ext in ['svg', 'pdf', 'png']:
             fig.savefig(fig_filename+'.'+ext)
 
+    plt.ion()
+    plt.show()
+
+
+def plot_fitness_cost_allmuts(sMu):
+    '''Plot fitness cost after per-mut fits'''
+    from matplotlib import cm
+
+    fs = 14
+
+    fig, ax = plt.subplots()
+    ax.set_xlabel('Variability in subtype B [bits]', fontsize=fs)
+    ax.set_ylabel('Fitness cost [1/days]', fontsize=fs)
+    ax.set_xlim(0.9e-3, 1.1)
+    ax.set_ylim(1e-5, 1e0)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.xaxis.set_tick_params(labelsize=fs)
+    ax.yaxis.set_tick_params(labelsize=fs)
+
+
+    # mut, S, (s/ds)
+    sMu = sMu.transpose(1, 2, 0)
+
+    handles = []
+    for imut, (mut, s) in enumerate(sMu.iteritems()):
+        x = np.maximum(1e-3, np.array(s.index))
+        # Wiggle x around a bit
+        x *= 0.95 + 0.1 * imut / (len(sMu.items) - 1)
+        y = np.array(s['s'])
+        dy = np.array(s['ds'])
+        color = cm.jet(1.0 * imut / len(sMu.items))
+        ax.errorbar(x, y, yerr=dy,
+                    fmt='none',
+                    lw=2,
+                    ecolor=color,
+                   )
+        h = ax.scatter(x, y, s=70, color=color, label=mut)
+        handles.append(h)
+
+    leg1 = ax.legend(handles=handles, loc='lower left', fontsize=fs, ncol=2)
+    ax.add_artist(leg1)
+
+    # Add grey sweeps
+    sMin = np.array(sMu.min(axis=0)['s'])
+    sMax = np.array(sMu.max(axis=0)['s'])
+    x = np.array(sMu.major_axis)
+    x[0] = 0.9e-3
+    x[-1] = 1.1
+    ax.fill_between(x, sMin, sMax,
+                    color='grey',
+                    alpha=0.3)
+
+    # Add median
+    sMed = np.array(sMu.median(axis=0)['s'])
+    h = ax.plot(x, sMed, lw=2, color='black', label='Median')
+    ax.legend(handles=h, loc='upper right', fontsize=fs)
+
+    plt.tight_layout()
     plt.ion()
     plt.show()
 
@@ -781,7 +713,12 @@ if __name__ == '__main__':
                                   muNS=muNS,
                                   nu_sweep_norm=nu_sweep_norm)
 
-    #sys.exit()
+    sMu = fit_fitness_cost_interpmu_permu(data_to_fit,
+                                          mu=mu,
+                                          muNS=muNS,
+                                          nu_sweep_norm=nu_sweep_norm)
+
+    sys.exit()
 
     if True:
         def fit_fitness_cost_for_bootstrap(data):
@@ -803,11 +740,13 @@ if __name__ == '__main__':
     fn_s = 'data/fitness_cost_result.pickle'
     s.to_pickle(fn_s)
 
+    plot_fitness_cost_allmuts(sMu)
+
     for mut in ['A->G', 'G->A', 'C->T', 'T->C']:
         plot_fitness_cost(data_to_fit,
-                          s['s'], mu, ds=s['ds_bootstrap'],
+                          sMu.loc['s', mut], mu, ds=sMu.loc['ds', mut],
                           muNS=muNS,
                           mut=mut,
                           nu_sweep_norm=nu_sweep_norm,
-                          savefig='figures/fitness_cost_saturation_'+mut,
+                          #savefig='figures/fitness_cost_saturation_'+mut,
                          )
