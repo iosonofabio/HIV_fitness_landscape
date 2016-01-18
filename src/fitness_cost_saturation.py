@@ -153,6 +153,160 @@ def prepare_data_for_fit(data, plot=False):
     del d['counter']
     return d
 
+def fit_fitness_cost_simplest(data, plot=True, bootstrap=True):
+    '''Fit one slope and 6 saturations to ALL data at once'''
+    def average_data(data):
+        data = data.copy()
+        data['counter'] = 1.0
+        d = (data
+             .loc[:, ['S_binc', 'time_binc', 'af', 'counter']]
+             .groupby(['S_binc', 'time_binc'], as_index=True)
+             .sum())
+        d['af'] /= d['counter']
+        data_to_fit = d['af'].unstack()
+        data_to_fit.name = 'af'
+        return data_to_fit
+
+    def fit_data(data_to_fit, mu=None):
+        from scipy.optimize import curve_fit
+
+        # First fit slope from high-entropy class
+        if mu is None:
+            datum = data_to_fit.iloc[-1]
+            nInd = 3
+            x = np.array(datum.index)[:3]
+            y = np.array(datum)[:3]
+            mu = np.dot(x, y) / np.dot(x, x)
+
+        # Then, fit the saturations
+        s = []
+        fun = lambda x, s: mu / s * (1.0 - np.exp(-s * x))
+        for iS, (S, datum) in enumerate(data_to_fit.iterrows()):
+            x = np.array(datum.index)
+            y = np.array(datum)
+            s0 = 1e-2 / 10**(iS / 2.0)
+            fit = curve_fit(fun, x, y, p0=[s0])
+            sTmp = fit[0][0]
+            dsTmp = fit[1][0][0]
+            s.append({'S': S,
+                      's': sTmp,
+                      'ds': dsTmp,
+                     })
+        s = pd.DataFrame(s).set_index('S', drop=True, inplace=False)
+        return mu, s
+
+    def plot_fit(data_to_fit, mu, s):
+        from matplotlib import cm
+        fig_width = 5
+        fs = 16
+        fig, axs = plt.subplots(1, 2,
+                                figsize=(2 * fig_width, fig_width))
+
+        fun = lambda x, s: mu / s * (1.0 - np.exp(-s * x))
+
+        ax = axs[0]
+        for iS, (S, datum) in enumerate(data_to_fit.iterrows()):
+            x = np.array(datum.index)
+            y = np.array(datum)
+            color = cm.jet(1.0 * iS / data_to_fit.shape[0])
+            ax.scatter(x, y,
+                       s=70,
+                       color=color,
+                      )
+
+            xfit = np.linspace(0, 3000)
+            yfit = fun(xfit, s.loc[S, 's'])
+            ax.plot(xfit, yfit,
+                    lw=2,
+                    color=color,
+                   )
+
+        ax.set_xlabel('Time [days from infection]', fontsize=fs)
+        ax.set_ylabel('Average allele frequency', fontsize=fs)
+        ax.set_ylim(-0.0005, 0.005)
+        ax.set_xticks(np.linspace(0, 0.005, 5))
+        ax.set_xticks([0, 1000, 2000, 3000])
+        ax.xaxis.set_tick_params(labelsize=fs)
+        ax.yaxis.set_tick_params(labelsize=fs)
+
+        ax = axs[1]
+        x = np.array(s.index)
+        y = np.array(s['s'])
+        dy = np.array(s['ds'])
+
+        ymin = 0.1
+
+        x = x[1:]
+        y = y[1:]
+        dy = dy[1:]
+
+        ax.errorbar(x, y,
+                    yerr=dy,
+                    lw=2,
+                    color='k',
+                   )
+
+        ax.plot([1e-3, s.index[1]],
+                [s['s'].iloc[0], s['s'].iloc[1]],
+                lw=2,
+                ls='--',
+                color='k',
+               )
+        ax.errorbar([1e-3], [s['s'].iloc[0]],
+                    yerr=[s['ds'].iloc[0]],
+                    lw=2,
+                    color='k'
+                   )
+
+        ax.annotate('Full conservation',
+                    xy=(1.1e-3, 0.9 * s['s'].iloc[0]),
+                    xytext=(1.1e-3, 0.01 * s['s'].iloc[0]),
+                    arrowprops={'facecolor': 'black',
+                                'width': 1.5,
+                                'headlength': 10,
+                                'shrink': 0.1,
+                               },
+                    ha='left',
+                    va='center',
+                    fontsize=fs,
+                   )
+
+        ax.set_xlabel('Variability in subtype B [bits]', fontsize=fs)
+        ax.set_ylabel('Fitness cost', fontsize=fs)
+        ax.set_xlim(0.9e-3, 1.1)
+        ax.set_ylim(1e-5, max(0.1, ymin))
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.xaxis.set_tick_params(labelsize=fs)
+        ax.yaxis.set_tick_params(labelsize=fs)
+
+        plt.tight_layout()
+        plt.ion()
+        plt.show()
+
+
+    data_to_fit = average_data(data)
+    mu, s = fit_data(data_to_fit)
+
+    def bootstrap():
+        def prepare_and_fit(data):
+            data_to_fit = average_data(data)
+            return fit_data(data_to_fit, mu=mu)[1]['s']
+
+        ds = s['s'].copy()
+        sBS = boot_strap_patients(data, prepare_and_fit, n_bootstrap=100)
+        for key, _ in ds.iteritems():
+            ds[key] = np.std([tmp[key] for tmp in sBS])
+        s['ds'] = ds
+
+    if bootstrap:
+        bootstrap()
+
+    if plot:
+        plot_fit(data_to_fit, mu, s)
+
+    return mu, s
+
 
 def fit_fitness_cost_interpmu(data_to_fit, mu,
                               muNS,
@@ -686,6 +840,11 @@ if __name__ == '__main__':
 
     fnS = fn.split('.')[0]+'_Sbins.npz'
     np.savez(fnS, bins=S_bins, binc=S_binc, n_alleles=n_alleles)
+
+    # Simplest model, dump all together no matter what the mutation rate
+    muNS, s = fit_fitness_cost_simplest(data)
+
+    sys.exit()
 
     # Estimate initial slope from data themselves, without sweeps
     muNS = fit_mu_highentropy(data)
