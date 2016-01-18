@@ -4,6 +4,7 @@ sys.path.append('/ebio/ag-neher/share/users/rneher/HIVEVO_access/')
 import numpy as np
 from itertools import izip
 from hivevo.patients import Patient
+from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 from matplotlib import pyplot as plt
@@ -24,18 +25,56 @@ def patient_partition(afs):
     remainder = set(patients).difference(tmp_sample)
     return [afs[pat] for pat in tmp_sample], [afs[pat] for pat in remainder]
 
-
 def af_average(afs):
     tmp_afs = np.sum(afs, axis=0)
     tmp_afs = tmp_afs/(np.sum(tmp_afs, axis=0)+1e-6)
     return tmp_afs
 
+def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
+    from Bio.Seq import CodonTable
+    CT = CodonTable.standard_dna_table.forward_table
+    targets = [x for x,a in CT.iteritems() if a==der]
+    print(CT[initial_codon], initial_codon, targets)
+    mut_rate=0
+    for codon in targets:
+        nmuts = sum([a!=d for a,d in zip(initial_codon, codon)])
+        mut_rate+=np.prod([nuc_muts[a+'->'+d] for a,d in
+                    zip(initial_codon, codon) if a!=d])*((nmuts==1) or doublehit)
+        print(mut_rate, [nuc_muts[a+'->'+d] for a,d in zip(initial_codon, codon) if a!=d])
+
+    return mut_rate
+
+drug_muts = {'PR':{'offset': 56 - 1,
+                    'mutations':  [('L', 24, 'I'), ('V', 32, 'I'), ('M', 46, 'IL'), ('I', 47, 'VA'),
+                        ('G', 48, 'VM'), ('I', 50, 'LV'), ('I', 54, 'VTAM'), ('L', 76, 'V'),
+                        ('V', 82, 'ATSF'), ('I', 84, 'V'), ('N', 88, 'S'), ('L', 90, 'M')]},
+             'RT':{'offset':56 + 99 - 1,
+                    'mutations': [('K', 65, 'R'),('L', 100, 'I'),('K', 101, 'PEH'), ('K', 103,'N'),
+                                ('V', 106, 'AM'),('Y', 181, 'CIV'), ('M', 184,'VI'), ('G',190,'ASEQ'),
+                               ('L', 210,'W'), ('T', 215,'Y'), ('K', 219,'QE')]
+                   }
+            }
+
+nuc_muts = {
+'A->C': 8.565560e-07,
+'A->G': 5.033925e-06,
+'A->T': 5.029735e-07,
+'C->A': 3.062461e-06,
+'C->G': 5.314500e-07,
+'C->T': 1.120391e-05,
+'G->A': 1.467470e-05,
+'G->C': 1.987029e-07,
+'G->T': 1.180130e-06,
+'T->A': 1.708172e-06,
+'T->C': 7.372737e-06,
+'T->G': 1.899181e-06,
+}
 
 if __name__=="__main__":
-    patients = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes
+    patients = ['p1', 'p2','p3','p4', 'p5','p6','p8', 'p9','p10', 'p11'] # all subtypes
     #patients = ['p2','p3','p5', 'p8', 'p9','p10', 'p11'] # subtype B only
     #regions = ['PR', 'RT'] #, 'p17', 'p24', 'PR', 'IN']
-    regions = ["gag", "pol", "nef"]
+    regions = ["pol"] #["gag", "pol", "nef"]
     #regions = ['gp120', 'gp41']
     subtype='any'
 
@@ -45,10 +84,12 @@ if __name__=="__main__":
     cov_min=100
     combined_af={}
     combined_af_by_pat={}
+    initial_codons_by_pat={}
     combined_phenos={}
     aa_ref = 'NL4-3'
     for region in regions:
         combined_af_by_pat[region] = {}
+        initial_codons_by_pat[region]={}
         nl43 = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         #hxb2 = HIVreference(refname='HXB2', subtype = 'B')
         good_pos_in_reference = nl43.get_ungapped(threshold = 0.05)
@@ -63,6 +104,8 @@ if __name__=="__main__":
                 print(pcode, p.Subtype)
                 try:
                     aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=1e-3)
+                    init_nuc_sec = "".join(p.get_initial_sequence(region))
+                    initial_codons_by_pat[region][pcode] = [init_nuc_sec[ii:ii+3] for ii in range(0,len(init_nuc_sec), 3)]
                 except:
                     print("Can't load allele freqs of patient",pcode)
                     continue
@@ -132,6 +175,57 @@ if __name__=="__main__":
                 minor_af_part[region].append((tmp_af[:21,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:21,:].sum(axis=0)+1e-6))
 
 
+        if region=='pol':
+            for prot in drug_muts:
+                drug_afs = {}
+                drug_mut_rates = {}
+                offset = drug_muts[prot]['offset']
+                all_muts =  drug_muts[prot]['mutations']
+                for cons_aa, pos, muts in all_muts:
+                    tmp = []
+                    tmp_muts = []
+                    for pcode in combined_af_by_pat[region]:
+                        drug_af = 0
+                        mut_rate = 0
+                        af_vec = combined_af_by_pat[region][pcode][:,pos+offset]
+                        tot=af_vec.sum()
+                        init_codon = initial_codons_by_pat[region][pcode][pos+offset]
+                        if af_vec.argmax()!=alphaal.index(cons_aa):
+                            print('Doesn')
+                        if tot:
+                            for aa in muts:
+                                print(cons_aa)
+                                mut_rate += aminoacid_mutation_rate(init_codon, aa, nuc_muts)
+                                drug_af+=af_vec[alphaal.index(aa)]/tot
+                            tmp.append(drug_af)
+                            tmp_muts.append(mut_rate)
+                        else:
+                            tmp.append(np.nan)
+                            tmp_muts.append(np.nan)
+
+                    drug_afs[cons_aa+str(pos)+muts] = np.array(tmp)
+                    drug_mut_rates[cons_aa+str(pos)+muts] = np.array(tmp_muts)
+                plt.figure()
+                sns.stripplot(data=pd.DataFrame(drug_afs), jitter=True)
+                plt.yscale('log')
+                plt.ylim([3e-6, 1e-2])
+                #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+                plt.tight_layout()
+
+                plt.figure()
+                sns.stripplot(data=pd.DataFrame(drug_mut_rates), jitter=True)
+                plt.yscale('log')
+                plt.ylim([1e-12, 1e-4])
+                #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+                plt.tight_layout()
+
+
+                aa_sel_coeff = {mut: np.mean(drug_mut_rates[mut])/np.mean(drug_afs[mut]) for mut in drug_afs}
+                print aa_sel_coeff
+
+            #plt.boxplot(RT_afs)
+
+
     for region in regions:
         nl43 = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         xsS = nl43.entropy
@@ -190,13 +284,23 @@ if __name__=="__main__":
         plt.savefig('figures/aa_minor_af.pdf')
 
         plt.figure('section_coeff')
-        plt.plot(sorted(1e-5/(minor_af[region]+0.0001)), np.linspace(1,0,len(minor_af[region])),
+        plt.plot(sorted(4e-5/(minor_af[region]+0.0001)), np.linspace(1,0,len(minor_af[region])),
                 label=region + ' n='+str(len(minor_af[region])))
         plt.xscale('log')
         plt.yscale('linear')
         plt.legend(loc=2)
         plt.xlabel('selection coeff')
         plt.ylabel('P(s<X)')
+
+        plt.figure('section_coeff')
+        sel_coeffs = [4e-5/(minor_af[region][pos+56+99-1]+0.0001) for pos in [103, 184, 190, 210, 215, 219]]
+        plt.hist(4e-5/(minor_af[region]+0.0001), bins = np.logspace(-4,-0.5,31))
+        plt.xscale('log')
+        plt.yscale('linear')
+        plt.legend(loc=2)
+        plt.xlabel('selection coefficients')
+        plt.ylabel('P(s<X)')
+
         plt.savefig('figures/aa_sel_coeff.pdf')
 
         plt.figure()
@@ -233,3 +337,17 @@ if __name__=="__main__":
             plt.ylabel(name+' [log10]')
             plt.xlabel('minor af [log10]')
             plt.title(tstr)
+
+
+
+from Bio.Seq import CodonTable
+CT = CodonTable.standard_dna_table.forward_table
+aa_mutation_rates = {}
+for aa1 in alphaal:
+    for aa2 in alphaal:
+        if aa1!=aa2:
+            tmp = []
+            for codon in CT:
+                if CT[codon]==aa1:
+                    tmp.append(aminoacid_mutation_rate(codon, aa2, nuc_muts))
+            aa_mutation_rates[aa1+'->'+aa2] = tmp

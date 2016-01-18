@@ -23,6 +23,38 @@ from hivevo.sequence import alpha, alphal
 from util import add_binned_column, boot_strap_patients
 
 
+def plot_mutation_increase(data):
+    d = (data
+         .loc[:, ['af', 'time_binc', 'mut']]
+         .groupby(['mut', 'time_binc'])
+         .mean()
+         .unstack('time_binc')
+         .loc[:, 'af'])
+    fig, axs = plt.subplots(1,2, figsize = (12,6))
+    for mut, aft in d.iterrows():
+        if mut in ['A->G', 'G->A', 'T->C', 'C->T']:
+            ax=axs[0]
+        else:
+            ax=axs[1]
+        if mut in ['A->T', 'G->C', 'T->A', 'C->G']:
+            ls='--o'
+        else:
+            ls='-o'
+        times = np.array(aft.index)
+        aft = np.array(aft)
+        ax.plot(times[:-1], aft[:-1], ls, lw=3, label=mut)
+
+    for ax in axs:
+        ax.legend(loc=2, ncol=2, numpoints=2)
+        ax.set_xlim([0,2000])
+        ax.set_xlabel('days since EDI', fontsize =   24)
+        ax.set_ylabel('fraction mutated', fontsize = 24)
+        ax.tick_params(axis='both', labelsize=18)
+
+    plt.tight_layout()
+    plt.savefig('mutation_linear_increase.png')
+
+
 
 # Functions
 def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
@@ -140,7 +172,7 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
             color = 'black'
         else:
             color = 'white'
-        
+
         txt = '{:1.1f}'.format(np.log10(rate))
         if dmulog10 is not None:
             txt = '$'+txt+' \pm '+'{:1.1f}'.format(dmulog10[mut])+'$'
@@ -154,7 +186,7 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
                )
 
     plt.tight_layout()
-    
+
     if savefig:
         fig_filename = '/home/fabio/university/phd/thesis/tex/figures/mutation_rate_matrix_neutralclass'
         for ext in ['svg', 'pdf', 'png']:
@@ -335,7 +367,7 @@ if __name__ == '__main__':
     plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
 
     plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
-
+    plot_mutation_increase(data)
 
     # Save to file
     fn = '../data/mutation_rate.pickle'
