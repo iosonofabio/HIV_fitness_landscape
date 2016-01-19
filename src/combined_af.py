@@ -34,7 +34,7 @@ def af_average(afs):
 if __name__=="__main__":
     patients = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes
     #patients = ['p2','p3','p5', 'p8', 'p9','p10', 'p11'] # subtype B only
-    regions = ['RRE'] #, 'gag']
+    regions = ['gag', 'pol']
     subtype='B'
     mut_rate = 2e-5
     cols = sns.color_palette(n_colors=4)
