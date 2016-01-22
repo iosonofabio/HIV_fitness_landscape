@@ -13,6 +13,8 @@ from scipy.stats import spearmanr
 from random import sample
 import pandas as pd
 
+fs=16
+
 plt.ion()
 def patient_bootstrap(afs):
     patients = afs.keys()
@@ -59,6 +61,23 @@ drug_muts = {'PR':{'offset': 56 - 1,
                    }
             }
 
+protective_positions = {
+    'gag':{'gag':[12, 26, 28,79,147, 242, 248, 264, 268, 340, 357, 397, 403, 437]},
+    'nef':{'nef':[71,81, 83, 85, 92, 94, 102,105,116,120,126,133,135]},
+    'pol':{
+    'PR':[35,93],
+    'RT':[135, 245,277,369,395],
+    'INT':[11,32,119,122,124],}
+}
+offsets = {
+    'gag':-1,
+    'PR':55,
+    'nef':-1,
+    'RT':55+99,
+    'INT':55+99+440+120,
+}
+
+
 nuc_muts = {
 'A->C': 8.565560e-07,
 'A->G': 5.033925e-06,
@@ -78,7 +97,7 @@ if __name__=="__main__":
     patients = ['p1', 'p2','p3','p4', 'p5','p6','p8', 'p9','p10', 'p11'] # all subtypes
     #patients = ['p2','p3','p5', 'p8', 'p9','p10', 'p11'] # subtype B only
     #regions = ['PR', 'RT'] #, 'p17', 'p24', 'PR', 'IN']
-    regions = ["pol"] #["gag", "pol", "nef"]
+    regions = ["gag", "pol", "nef"]
     #regions = ['gp120', 'gp41']
     subtype='any'
 
@@ -248,6 +267,7 @@ if __name__=="__main__":
             #plt.boxplot(RT_afs)
 
 
+    cols = sns.color_palette()
     for region in regions:
         nl43 = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         xsS = nl43.entropy
@@ -280,19 +300,35 @@ if __name__=="__main__":
         print(spearmanr(combined_entropy[region][ind], xsS[ind]))
 
         plt.figure()
-        plt.title(region+' entropy scatter')
+        #plt.title(region+' entropy scatter')
         npoints=25
-        for tmp_ind, l, c in [(hla_assoc_pos,"", 'g'),  (~hla_assoc_pos,"not", 'r')]:
-            plt.scatter(combined_entropy[region][tmp_ind]+.00001, xsS[tmp_ind]+.001, c=c, label=l+" HLA associated")
-            A = np.array(sorted(zip(combined_entropy[region][tmp_ind], xsS[tmp_ind]), key=lambda x:x[0]))
-            plt.plot(np.exp(np.convolve(np.log(A[:,0]+.00001), 1.0*np.ones(npoints)/npoints, mode='valid')),
-                        np.exp(np.convolve(np.log(A[:,1]+.001), 1.0*np.ones(npoints)/npoints, mode='valid')), c=c, label=l+" HLA associated", lw=3)
-        plt.ylabel('cross-sectional entropy')
-        plt.xlabel('pooled within patient entropy')
+        for tmp_ind, l, c in [(~hla_assoc_pos,"not", cols[1]),(hla_assoc_pos,"", cols[0])]:
+            plt.scatter(combined_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=c, label=l+" HLA associated", s=40)
+            A = np.array(sorted(zip(combined_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
+            plt.plot(np.exp(np.convolve(np.log(A[:,0]+.00003), 1.0*np.ones(npoints)/npoints, mode='valid')),
+                        np.exp(np.convolve(np.log(A[:,1]+.005), 1.0*np.ones(npoints)/npoints, mode='valid')), c=c, label=l+" HLA associated", lw=3)
+        A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
+        prots = sorted([(k,offsets[k]) for k in protective_positions[region]], key=lambda x:x[1])
+        prot_pos = np.array([x[1] for x in prots]+[1000000])
+#        for ni, (intra, cross) in enumerate(A):
+#            if intra<0.003 and cross>0.1:
+#                prot = prots[np.argmax(prot_pos>ni)-1]
+#                plt.annotate(prot[0]+':' +str(ni-prot[1]), (intra, cross), (intra*1.05, cross*1.05), color='g')
+
+        for feat, positions in protective_positions[region].iteritems():
+            for pos in positions:
+                intra, cross = A[pos+offsets[feat],:]
+                plt.annotate(feat+':' +str(pos), (intra, cross), (intra*1.05, cross*1.05), color='r')
+
+
+        plt.ylabel('cross-sectional entropy', fontsize=fs)
+        plt.xlabel('pooled within patient entropy', fontsize=fs)
         plt.yscale('log')
         plt.xscale('log')
-        plt.ylim([0.001, 2])
-        plt.xlim([0.0001, 2])
+        plt.ylim([0.003, 2])
+        plt.xlim([0.00001, .3])
+        plt.tick_params(labelsize=fs*0.8)
+        plt.tight_layout()
         plt.savefig('figures/'+region+'_aa_entropy_scatter.pdf')
 
         plt.figure("minor_freq")
