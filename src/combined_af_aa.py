@@ -13,6 +13,8 @@ from scipy.stats import spearmanr
 from random import sample
 import pandas as pd
 
+fs=16
+
 plt.ion()
 def patient_bootstrap(afs):
     patients = afs.keys()
@@ -48,12 +50,33 @@ drug_muts = {'PR':{'offset': 56 - 1,
                     'mutations':  [('L', 24, 'I'), ('V', 32, 'I'), ('M', 46, 'IL'), ('I', 47, 'VA'),
                         ('G', 48, 'VM'), ('I', 50, 'LV'), ('I', 54, 'VTAM'), ('L', 76, 'V'),
                         ('V', 82, 'ATSF'), ('I', 84, 'V'), ('N', 88, 'S'), ('L', 90, 'M')]},
-             'RT':{'offset':56 + 99 - 1,
-                    'mutations': [('K', 65, 'R'),('L', 100, 'I'),('K', 101, 'PEH'), ('K', 103,'N'),
-                                ('V', 106, 'AM'),('Y', 181, 'CIV'), ('M', 184,'VI'), ('G',190,'ASEQ'),
-                               ('L', 210,'W'), ('T', 215,'Y'), ('K', 219,'QE')]
+             'RT_NRTI':{'offset':56 + 99 - 1,
+                    'mutations': [('M', 41, 'L'),('K', 65, 'R'),('K', 70, 'ER'),('L', 74, 'VI'),
+                                ('Y', 115, 'F'),  ('M', 184,'VI'), ('L', 210,'W'), ('T', 215,'YF'), ('K', 219,'QE')]
+                   },
+             'RT_NNRTI':{'offset':56 + 99 - 1,
+                    'mutations': [('L', 100, 'I'),('K', 101, 'PEH'), ('K', 103,'N'),
+                                ('V', 106, 'AM'),('E', 138, 'K'),('V', 179, 'DEF'), ('Y', 181, 'CIV'),
+                                ('Y', 188, 'LCH'),('G',190,'ASEQ'), ('F', 227,'LC'), ('M', 230,'L')]
                    }
             }
+
+protective_positions = {
+    'gag':{'gag':[12, 26, 28,79,147, 242, 248, 264, 268, 340, 357, 397, 403, 437]},
+    'nef':{'nef':[71,81, 83, 85, 92, 94, 102,105,116,120,126,133,135]},
+    'pol':{
+    'PR':[35,93],
+    'RT':[135, 245,277,369,395],
+    'INT':[11,32,119,122,124],}
+}
+offsets = {
+    'gag':-1,
+    'PR':55,
+    'nef':-1,
+    'RT':55+99,
+    'INT':55+99+440+120,
+}
+
 
 nuc_muts = {
 'A->C': 8.565560e-07,
@@ -74,7 +97,7 @@ if __name__=="__main__":
     patients = ['p1', 'p2','p3','p4', 'p5','p6','p8', 'p9','p10', 'p11'] # all subtypes
     #patients = ['p2','p3','p5', 'p8', 'p9','p10', 'p11'] # subtype B only
     #regions = ['PR', 'RT'] #, 'p17', 'p24', 'PR', 'IN']
-    regions = ["pol"] #["gag", "pol", "nef"]
+    regions = ["gag", "pol", "nef"]
     #regions = ['gp120', 'gp41']
     subtype='any'
 
@@ -104,13 +127,13 @@ if __name__=="__main__":
                 print(pcode, p.Subtype)
                 try:
                     aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=1e-3)
-                    init_nuc_sec = "".join(p.get_initial_sequence(region))
-                    initial_codons_by_pat[region][pcode] = [init_nuc_sec[ii:ii+3] for ii in range(0,len(init_nuc_sec), 3)]
                 except:
                     print("Can't load allele freqs of patient",pcode)
                     continue
                 # get patient to subtype map and subset entropy vectors, convert to bits
                 patient_to_subtype = p.map_to_external_reference_aminoacids(region, refname = aa_ref)
+                init_nuc_sec = "".join(p.get_initial_sequence(region))
+                initial_codons_by_pat[region][pcode] = {ci:init_nuc_sec[ii*3:(ii+1)*3] for ci, ii in patient_to_subtype}
                 consensus = nl43.get_consensus_indices_in_patient_region(patient_to_subtype)
                 ancestral = p.get_initial_indices(region, type='aa')[patient_to_subtype[:,1]]
                 rare = ((aft[:,:21,:]**2).sum(axis=1).min(axis=0)>0.25)[patient_to_subtype[:,1]]
@@ -194,8 +217,8 @@ if __name__=="__main__":
                             print('Doesn')
                         if tot:
                             for aa in muts:
-                                print(cons_aa)
-                                mut_rate += aminoacid_mutation_rate(init_codon, aa, nuc_muts)
+                                print(prot, pcode, pos, cons_aa)
+                                mut_rate += aminoacid_mutation_rate(init_codon, aa, nuc_muts, doublehit=True)
                                 drug_af+=af_vec[alphaal.index(aa)]/tot
                             tmp.append(drug_af)
                             tmp_muts.append(mut_rate)
@@ -203,29 +226,48 @@ if __name__=="__main__":
                             tmp.append(np.nan)
                             tmp_muts.append(np.nan)
 
-                    drug_afs[cons_aa+str(pos)+muts] = np.array(tmp)
-                    drug_mut_rates[cons_aa+str(pos)+muts] = np.array(tmp_muts)
+                    drug_afs[(cons_aa,pos,muts)] = np.array(tmp)
+                    drug_mut_rates[(cons_aa,pos,muts)] = np.array(tmp_muts)
                 plt.figure()
-                sns.stripplot(data=pd.DataFrame(drug_afs), jitter=True)
+                plt.title(prot)
+                drug_afs_items = sorted(drug_afs.items(), key=lambda x:x[0][1])
+                sns.stripplot(data=pd.DataFrame(np.array([x[1] for x in drug_afs_items]).T,
+                              columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True)
                 plt.yscale('log')
-                plt.ylim([3e-6, 1e-2])
+                plt.ylim([3e-6, 1e-1])
+                plt.ylabel('minor variant frequency')
                 #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
                 plt.tight_layout()
+                plt.savefig('figures/'+prot+'_minor_variant_frequency.pdf')
 
                 plt.figure()
-                sns.stripplot(data=pd.DataFrame(drug_mut_rates), jitter=True)
+                plt.title(prot)
+                drug_mut_rates_items = sorted(drug_mut_rates.items(), key=lambda x:x[0][1])
+                sns.stripplot(data=pd.DataFrame(np.array([x[1] for x in drug_mut_rates_items]).T,
+                              columns = ["".join(map(str,x[0])) for x in drug_mut_rates_items]), jitter=True)
                 plt.yscale('log')
-                plt.ylim([1e-12, 1e-4])
+                plt.ylim([3e-8, 1e-4])
+                plt.ylabel('mutation rate')
                 #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
                 plt.tight_layout()
+                plt.savefig('figures/'+prot+'_mutation_rate.pdf')
 
 
-                aa_sel_coeff = {mut: np.mean(drug_mut_rates[mut])/np.mean(drug_afs[mut]) for mut in drug_afs}
-                print aa_sel_coeff
-
+                aa_sel_coeff = sorted([(mut, np.mean(drug_mut_rates[mut])/np.mean(drug_afs[mut])) for mut in drug_afs], key=lambda x:x[0][1])
+                plt.figure()
+                plt.title(prot)
+                plt.plot([min(1,a[1]) for a in aa_sel_coeff], 'o')
+                plt.xticks(np.arange(len(aa_sel_coeff)), ["".join(map(str,a[0])) for a in aa_sel_coeff])
+                plt.yscale('log')
+                plt.ylabel('estimated fitness cost')
+                #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+                plt.tight_layout()
+                plt.savefig('figures/'+prot+'_cost.pdf')
+                print(aa_sel_coeff)
             #plt.boxplot(RT_afs)
 
 
+    cols = sns.color_palette()
     for region in regions:
         nl43 = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         xsS = nl43.entropy
@@ -258,19 +300,35 @@ if __name__=="__main__":
         print(spearmanr(combined_entropy[region][ind], xsS[ind]))
 
         plt.figure()
-        plt.title(region+' entropy scatter')
+        #plt.title(region+' entropy scatter')
         npoints=25
-        for tmp_ind, l, c in [(hla_assoc_pos,"", 'g'),  (~hla_assoc_pos,"not", 'r')]:
-            plt.scatter(combined_entropy[region][tmp_ind]+.00001, xsS[tmp_ind]+.001, c=c, label=l+" HLA associated")
-            A = np.array(sorted(zip(combined_entropy[region][tmp_ind], xsS[tmp_ind]), key=lambda x:x[0]))
-            plt.plot(np.exp(np.convolve(np.log(A[:,0]+.00001), 1.0*np.ones(npoints)/npoints, mode='valid')),
-                        np.exp(np.convolve(np.log(A[:,1]+.001), 1.0*np.ones(npoints)/npoints, mode='valid')), c=c, label=l+" HLA associated", lw=3)
-        plt.ylabel('cross-sectional entropy')
-        plt.xlabel('pooled within patient entropy')
+        for tmp_ind, l, c in [(~hla_assoc_pos,"not", cols[1]),(hla_assoc_pos,"", cols[0])]:
+            plt.scatter(combined_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=c, label=l+" HLA associated", s=40)
+            A = np.array(sorted(zip(combined_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
+            plt.plot(np.exp(np.convolve(np.log(A[:,0]+.00003), 1.0*np.ones(npoints)/npoints, mode='valid')),
+                        np.exp(np.convolve(np.log(A[:,1]+.005), 1.0*np.ones(npoints)/npoints, mode='valid')), c=c, label=l+" HLA associated", lw=3)
+        A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
+        prots = sorted([(k,offsets[k]) for k in protective_positions[region]], key=lambda x:x[1])
+        prot_pos = np.array([x[1] for x in prots]+[1000000])
+#        for ni, (intra, cross) in enumerate(A):
+#            if intra<0.003 and cross>0.1:
+#                prot = prots[np.argmax(prot_pos>ni)-1]
+#                plt.annotate(prot[0]+':' +str(ni-prot[1]), (intra, cross), (intra*1.05, cross*1.05), color='g')
+
+        for feat, positions in protective_positions[region].iteritems():
+            for pos in positions:
+                intra, cross = A[pos+offsets[feat],:]
+                plt.annotate(feat+':' +str(pos), (intra, cross), (intra*1.05, cross*1.05), color='r')
+
+
+        plt.ylabel('cross-sectional entropy', fontsize=fs)
+        plt.xlabel('pooled within patient entropy', fontsize=fs)
         plt.yscale('log')
         plt.xscale('log')
-        plt.ylim([0.001, 2])
-        plt.xlim([0.0001, 2])
+        plt.ylim([0.003, 2])
+        plt.xlim([0.00001, .3])
+        plt.tick_params(labelsize=fs*0.8)
+        plt.tight_layout()
         plt.savefig('figures/'+region+'_aa_entropy_scatter.pdf')
 
         plt.figure("minor_freq")
