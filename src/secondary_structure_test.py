@@ -13,10 +13,72 @@ import numpy as np
 import pandas as pd
 from Bio import SeqIO
 
+from hivevo.HIVreference import HIVreference
+from hivevo.patients import Patient
 
 # Functions
-def parse_secondary_structure(filename):
-    pass
+def load_secondary_structure_patient(pcode):
+    '''Load the genomewide array with the protein secondary structures'''
+    fn = 'data/secondary_uniprot/patient_'+pcode+'.pickle'
+    return pd.read_pickle(fn)
+
+
+def parse_secondary_structure(protein):
+    '''Parse protein secondary structure data'''
+    filename = 'data/secondary_uniprot/'+protein+'.tsv'
+    t = pd.read_csv(filename,
+                    sep='\t',
+                    usecols=[0, 1, 2],
+                   )
+    t.rename(columns={u'# Feature key': 'feature',
+                      u'Position(s)': 'location',
+                      u'Length': 'length'},
+             inplace=True)
+    t['start'] = t['location'].apply(lambda x: int(x.split(' ')[0]))
+    t['end'] = t['location'].apply(lambda x: int(x.split(' ')[-1]) + 1)
+    t.drop(['length', 'location'], inplace=True, axis=1)
+    t.protein = args.protein
+    return t
+
+
+def annotate_dna_reference(protein):
+    '''Annotate DNA reference with the protein secondary structures'''
+    from Bio.SeqFeature import SeqFeature, FeatureLocation
+
+    annotation_table = parse_secondary_structure(protein)
+
+    features = []
+    for _, datum in annotation_table.iterrows():
+        start_dna = datum['start'] * 3
+        end_dna = datum['end'] * 3
+
+        # Notice ribosomal slippage site
+        if protein == 'gagpol':
+            if start_dna >= slippage_site:
+                start_dna -= 1
+            if end_dna >= slippage_site:
+                end_dna -= 1
+
+        anno = SeqFeature(FeatureLocation(start_dna, end_dna), strand=+1)
+        anno.type = datum['feature']
+        features.append(anno)
+
+    return features
+
+
+def double_check_reference(refprot, seq):
+    refm = np.array(refprot)
+    seqm = np.array(seq)
+
+    L = 800
+    for i in xrange(L // 100):
+        s1 = refm[i * 100: (i+1) * 100]
+        s2 = seqm[i * 100: (i+1) * 100]
+        print ''.join(s1)
+        print ''.join(['x' if x else ' ' for x in (s1 != s2)])
+        print ''.join(s2)
+        print ''
+
 
 
 # Script
@@ -39,22 +101,57 @@ if __name__ == '__main__':
     # TODO: we will annotate the actual DNA sequence eventually
     seq = SeqIO.read(fn_seq, 'fasta')
 
-    # Load annotations
-    t = pd.read_csv(fn,
-                    sep='\t',
-                    usecols=[0, 1, 2],
-                   )
-    t.rename(columns={u'# Feature key': 'feature',
-                      u'Position(s)': 'location',
-                      u'Length': 'length'},
-             inplace=True)
-    t['start'] = t['location'].apply(lambda x: int(x.split(' ')[0]))
-    t['end'] = t['location'].apply(lambda x: int(x.split(' ')[-1]) + 1)
-    t.drop(['length', 'location'], inplace=True, axis=1)
+    # Get the DNA sequence from our reference and compare (should be HXB2)
+    refname = 'HXB2'
+    ref = HIVreference(refname=refname, subtype='B', load_alignment=False)
 
-    # Apply annotations
-    from Bio.SeqFeature import SeqFeature, FeatureLocation
-    for _, datum in t.iterrows():
-        anno = SeqFeature(FeatureLocation(datum['start'],datum['end']), strand=+1)
-        anno.type = datum['feature']
-        seq.features.append(anno)
+    # Extract gagpol feature
+    if args.protein == 'gagpol':
+        from Bio.Seq import Seq
+        start = ref.annotation['gag'].location.nofuzzy_start
+        end = ref.annotation['pol'].location.nofuzzy_end
+        slippage_site = 434
+        refdna = (ref.seq[start: start + slippage_site * 3] +
+                  ref.seq[start + slippage_site * 3 - 1: end])
+        refprot = refdna.seq.translate()
+
+    else:
+        raise NotImplemented
+
+    #double_check_reference(refprot, seq)
+
+    #t = parse_secondary_structure(args.protein)
+
+    features = annotate_dna_reference(args.protein)
+
+
+    # Annotate patient sequences
+    patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
+    for pi, pcode in enumerate(patients):
+        print pcode
+        p = Patient.load(pcode)
+
+        if args.protein == 'gagpol':
+            rois = ['gag', 'pol']
+        else:
+            rois = [args.protein]
+
+        from collections import defaultdict
+        pos_array = p.get_initial_sequence('genomewide')
+        pos_array[:] = '-'
+        for roi in rois:
+            m = p.map_to_external_reference(roi, refname='HXB2')[:, 1]
+            pos_array[m] = 'X'
+
+        for roi in rois:
+            m = p.map_to_external_reference(roi, refname='HXB2')[:, :2]
+            m = pd.Series(m[:, 1], index=m[:, 0])
+            for fea in features:
+                poss = [m.loc[pos] for pos in list(fea) if pos in m.index]
+                pos_array[poss] = fea.type[0]
+
+        pos_array = pd.Series(pos_array)
+        pos_array.name = 'protein secondary structure'
+
+        fn_out = 'data/secondary_uniprot/patient_'+pcode+'.pickle'
+        pos_array.to_pickle(fn_out)
