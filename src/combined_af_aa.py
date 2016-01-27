@@ -9,7 +9,7 @@ from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 from matplotlib import pyplot as plt
 import seaborn as sns
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, ks_2samp
 from random import sample
 import pandas as pd
 
@@ -310,16 +310,19 @@ if __name__=="__main__":
         A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
         prots = sorted([(k,offsets[k]) for k in protective_positions[region]], key=lambda x:x[1])
         prot_pos = np.array([x[1] for x in prots]+[1000000])
+
 #        for ni, (intra, cross) in enumerate(A):
 #            if intra<0.003 and cross>0.1:
 #                prot = prots[np.argmax(prot_pos>ni)-1]
 #                plt.annotate(prot[0]+':' +str(ni-prot[1]), (intra, cross), (intra*1.05, cross*1.05), color='g')
 
+        ppos = []
         for feat, positions in protective_positions[region].iteritems():
             for pos in positions:
                 intra, cross = A[pos+offsets[feat],:]
+                ppos.append(pos+offsets[feat])
                 plt.annotate(feat+':' +str(pos), (intra, cross), (intra*1.05, cross*1.05), color='r')
-
+        ppos = np.in1d(np.arange(len(xsS)), np.unique(ppos))
 
         plt.ylabel('cross-sectional entropy', fontsize=fs)
         plt.xlabel('pooled within patient entropy', fontsize=fs)
@@ -329,7 +332,18 @@ if __name__=="__main__":
         plt.xlim([0.00001, .3])
         plt.tick_params(labelsize=fs*0.8)
         plt.tight_layout()
+        plt.plot([1e-4,1], [1e-1,1])
         plt.savefig('figures/'+region+'_aa_entropy_scatter.pdf')
+
+        diverse = (np.log(xsS+.00003) - 0.25*np.log(combined_entropy[region]+.00003))>0
+        var_hla = combined_entropy[region][diverse&(ppos|hla_assoc_pos)]+.00003
+        var_nonhla = combined_entropy[region][diverse&(~(ppos|hla_assoc_pos))]+.00003
+        print("KS test region:", ks_2samp(var_hla, var_nonhla), len(var_hla), len(var_nonhla))
+        plt.figure()
+        plt.title(region)
+        plt.plot(sorted(var_hla), np.linspace(0,1,len(var_hla)))
+        plt.plot(sorted(var_nonhla), np.linspace(0,1,len(var_nonhla)))
+        plt.xscale('log')
 
         plt.figure("minor_freq")
         plt.plot(sorted(minor_af[region]+0.00001), np.linspace(0,1,len(minor_af[region])),
