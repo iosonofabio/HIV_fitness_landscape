@@ -41,16 +41,24 @@ def parse_secondary_structure(protein):
     return t
 
 
-def annotate_dna_reference(protein):
+def annotate_dna_reference(ref, protein):
     '''Annotate DNA reference with the protein secondary structures'''
     from Bio.SeqFeature import SeqFeature, FeatureLocation
 
     annotation_table = parse_secondary_structure(protein)
 
+    if protein == 'gagpol':
+        start_protein = ref.annotation['gag'].location.nofuzzy_start
+    elif protein == 'vpu':
+        # Uniprot starts one aa downstream of us
+        start_protein = ref.annotation[protein].location.nofuzzy_start + 3
+    else:
+        start_protein = ref.annotation[protein].location.nofuzzy_start
+
     features = []
     for _, datum in annotation_table.iterrows():
-        start_dna = datum['start'] * 3
-        end_dna = datum['end'] * 3
+        start_dna = datum['start'] * 3 + start_protein
+        end_dna = datum['end'] * 3 + start_protein
 
         # Notice ribosomal slippage site
         if protein == 'gagpol':
@@ -74,10 +82,20 @@ def double_check_reference(refprot, seq):
     for i in xrange(L // 100):
         s1 = refm[i * 100: (i+1) * 100]
         s2 = seqm[i * 100: (i+1) * 100]
-        print ''.join(s1)
-        print ''.join(['x' if x else ' ' for x in (s1 != s2)])
-        print ''.join(s2)
-        print ''
+        if len(s1) == len(s2):
+            if len(s1) == 0:
+                break
+            print ''.join(s1)
+            print ''.join(['x' if x else ' ' for x in (s1 != s2)])
+            print ''.join(s2)
+            print ''
+        else:
+            l = min(len(s1), len(s2))
+            print ''.join(s1)
+            print ''.join(['x' if x else ' ' for x in (s1[:l] != s2[:l])])
+            print ''.join(s2)
+            print ''
+            break
 
 
 
@@ -86,7 +104,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Secondary structure')
     parser.add_argument('--protein',
-                        choices=['gagpol'],
+                        choices=['gagpol', 'env', 'nef', 'vpu'],
                         default='gagpol',
                         help="Protein to study")
 
@@ -115,15 +133,27 @@ if __name__ == '__main__':
                   ref.seq[start + slippage_site * 3 - 1: end])
         refprot = refdna.seq.translate()
 
-    else:
-        raise NotImplemented
+    elif args.protein == 'nef':
+        # it comes with the stop codon...
+        refdna = ref.annotation[args.protein].extract(ref.seq)
+        refprot = refdna.seq.translate()[:-1]
 
-    #double_check_reference(refprot, seq)
+    elif args.protein == 'vpu':
+        # it comes with a shift of one aa and the stop codon...
+        refdna = ref.annotation[args.protein].extract(ref.seq)
+        refprot = refdna.seq.translate()[1:-1]
+
+    else:
+        refdna = ref.annotation[args.protein].extract(ref.seq)
+        refprot = refdna.seq.translate()
+
+    double_check_reference(refprot, seq)
 
     #t = parse_secondary_structure(args.protein)
 
-    features = annotate_dna_reference(args.protein)
+    features = annotate_dna_reference(ref, args.protein)
 
+    #sys.exit()
 
     # Annotate patient sequences
     patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
@@ -137,8 +167,16 @@ if __name__ == '__main__':
             rois = [args.protein]
 
         from collections import defaultdict
-        pos_array = p.get_initial_sequence('genomewide')
-        pos_array[:] = '-'
+
+        # Add the annotations to the existing ones
+        if False:
+            pos_array = p.get_initial_sequence('genomewide')
+            pos_array[:] = '-'
+        else:
+            fn = 'data/secondary_uniprot/patient_'+pcode+'.pickle'
+            pos_array = np.array(pd.read_pickle(fn))
+
+        # Set all positions in this protein as UNSTRUCTURED
         for roi in rois:
             m = p.map_to_external_reference(roi, refname='HXB2')[:, 1]
             pos_array[m] = 'X'
