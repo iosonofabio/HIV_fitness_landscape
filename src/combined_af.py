@@ -144,22 +144,20 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None):
     ind = xsS>=0.000
     print(region)
     print("Pearson:", pearsonr(within_entropy[region][ind], xsS[ind]))
-    print("Spearman:", spearmanr(within_entropy[region][ind], xsS[ind]))
+    rho, pval = spearmanr(within_entropy[region][ind], xsS[ind])
+    print("Spearman:", rho, pval)
 
     plt.figure(figsize = (7,6))
-    # TODO change to syn/nonsyn?
-#    for ni in range(3):
-#        ind = (xsS>=0.000)&((np.arange(len(minor_af[region]))%3)==ni)
-#        plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label='position '+str(ni+1), s=30)
     for ni, syn_ind, label_str in ((0, ~synnonsyn[region], 'nonsynymous'), (2,synnonsyn[region], 'synonymous')):
         ind = (xsS>=0.000)&syn_ind
         plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label=label_str, s=30)
     plt.ylabel('cross-sectional entropy', fontsize=fs)
     plt.xlabel('pooled within patient entropy', fontsize=fs)
+    plt.text(0.00002, 1.3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
     plt.legend(loc=4, fontsize=fs*0.8)
     plt.yscale('log')
     plt.xscale('log')
-    plt.ylim([0.003, 2])
+    plt.ylim([0.001, 2])
     plt.xlim([0.00001, .3])
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
@@ -208,8 +206,6 @@ def selcoeff_confidence(region, data, fname=None):
     (combined_af, combined_entropy, minor_af, synnonsyn ,combined_entropy_bs, minor_af_bs) = \
         process_average_allele_frequencies(data, nbootstraps=100, bootstrap_type='bootstrap')
     minor_af_array=np.array(minor_af_bs[region])
-#    qtiles = np.array(sorted(np.vstack([scoreatpercentile(minor_af_array, x, axis=0)
-#                      for x in [25, 50, 75]]).T, key=lambda x:x[1]))
     qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
     scb = (data['mut_rate'][region]/(0.0001+qtiles)).T
     sel_coeff_array = (data['mut_rate'][region]/(0.0001+minor_af_array))
@@ -221,6 +217,7 @@ def selcoeff_confidence(region, data, fname=None):
         sl,su=scoreatpercentile(scb[:,1], ql), scoreatpercentile(scb[:,1], ql+2)
         which_quantile[(scb[:,1]>=sl)&(scb[:,1]<su)]=i+1
 
+    plt.figure(figsize = (8,6))
     for i in range(1,len(thres)):
         ind = which_quantile==i
         npoints = ind.sum()*sel_coeff_array.shape[0]
