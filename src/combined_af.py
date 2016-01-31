@@ -83,6 +83,10 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
     return combined_af_by_pat, syn_nonsyn_by_pat
 
 def collect_data(patient_codes, regions, reference):
+    '''
+    loop over regions and produce a dictionary that contains the frequencies,
+    syn/nonsyn designations and mutation rates
+    '''
     cov_min=1000
     combined_af_by_pat={}
     syn_nonsyn_by_pat={}
@@ -106,7 +110,11 @@ def collect_data(patient_codes, regions, reference):
 
     return {'af_by_pat':combined_af_by_pat, 'mut_rate':consensus_mutation_rate, 'syn_by_pat':syn_nonsyn_by_pat}
 
-def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='partition'):
+def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='bootstrap'):
+    '''
+    calculate the entropies, minor frequencies etc from the individual patient averages
+    boot strap on demand
+    '''
     combined_af={}
     combined_entropy={}
     minor_af={}
@@ -140,6 +148,9 @@ def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='pa
         return combined_af, combined_entropy, minor_af, synnonsyn
 
 def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None):
+    '''
+    scatter plot of cross-sectional entropy vs entropy of averaged intrapatient frequencies
+    '''
     xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
     ind = xsS>=0.000
     print(region)
@@ -165,6 +176,9 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None):
         plt.savefig(fname)
 
 def fraction_diverse(region, minor_af, synnonsyn, fname=None):
+    '''
+    cumulative figures of the frequency distributions
+    '''
     plt.figure()
     for ni, ind, label_str in ((0, ~synnonsyn[region], 'nonsynymous'), (2,synnonsyn[region], 'synonymous')):
         plt.plot(sorted(minor_af[region][ind]+0.00001), np.linspace(0,1,ind.sum()),
@@ -179,6 +193,10 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
         plt.savefig(fname)
 
 def selcoeff_distribution(region, minor_af, synnonsyn, mut_rates, fname=None):
+    '''
+    produce figure of distribution of selection coefficients separately for
+    synonymous and nonsynonymous sites.
+    '''
     fig, axs = plt.subplots(1,2,sharey=True)
     #plt.title(region+' selection coefficients')
     for ni,ax,ind, label_str in ((0,axs[0], synnonsyn[region], 'synonymous'), (1,axs[1], ~synnonsyn[region], 'nonsynonymous')):
@@ -203,6 +221,12 @@ def selcoeff_distribution(region, minor_af, synnonsyn, mut_rates, fname=None):
 
 
 def selcoeff_confidence(region, data, fname=None):
+    '''
+    bootstrap the selection coefficients and make distributions of the bootstrapped
+    values for subsets of sites with a defined median. this should give an impression
+    of how variable the estimates are. three such distributions are combined in one
+    figure
+    '''
     (combined_af, combined_entropy, minor_af, synnonsyn ,combined_entropy_bs, minor_af_bs) = \
         process_average_allele_frequencies(data, nbootstraps=100, bootstrap_type='bootstrap')
     minor_af_array=np.array(minor_af_bs[region])
@@ -244,10 +268,11 @@ if __name__=="__main__":
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
-    regions = ['gag', 'pol']
+    regions = ['gag', 'pol', 'nef']
     if not os.path.isfile(fn) or args.regenerate:
-        #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
-        patient_codes = ['p2','p3','p4','p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+        patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
+        #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
+        #patient_codes = ['p2','p3','p4','p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         data = collect_data(patient_codes, regions, reference)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
