@@ -270,9 +270,9 @@ if __name__=="__main__":
 
     regions = ['gag', 'pol', 'nef']
     if not os.path.isfile(fn) or args.regenerate:
-        patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
+        #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
-        #patient_codes = ['p2','p3','p4','p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+        patient_codes = ['p2','p3','p4','p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         data = collect_data(patient_codes, regions, reference)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
