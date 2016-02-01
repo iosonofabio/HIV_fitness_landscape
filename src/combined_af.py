@@ -58,7 +58,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
         print(pcode, p.Subtype)
         aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, error_rate = 2e-3, type='nuc')
 
-        # get patient to subtype map and subset entropy vectors, convert to bits
+        # get patient to subtype map
         patient_to_subtype = p.map_to_external_reference(region, refname = reference.refname)
         consensus = reference.get_consensus_indices_in_patient_region(patient_to_subtype)
         ref_ungapped = good_pos_in_reference[patient_to_subtype[:,0]]
@@ -110,7 +110,7 @@ def collect_data(patient_codes, regions, reference):
 
     return {'af_by_pat':combined_af_by_pat, 'mut_rate':consensus_mutation_rate, 'syn_by_pat':syn_nonsyn_by_pat}
 
-def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='bootstrap'):
+def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap_type='bootstrap', nstates=4):
     '''
     calculate the entropies, minor frequencies etc from the individual patient averages
     boot strap on demand
@@ -118,7 +118,6 @@ def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='bo
     combined_af={}
     combined_entropy={}
     minor_af={}
-    synnonsyn={}
 
     # boot straps
     minor_af_bs={}
@@ -126,7 +125,7 @@ def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='bo
     for region in regions:
         combined_af[region] = af_average(data['af_by_pat'][region].values())
         combined_entropy[region] = (-np.log(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
-        minor_af[region] = (combined_af[region][:4,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:4,:].sum(axis=0))
+        minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
         if nbootstraps:
             minor_af_bs[region]=[]
             combined_entropy_bs[region]=[]
@@ -134,18 +133,17 @@ def process_average_allele_frequencies(data, nbootstraps = 0, bootstrap_type='bo
                 for ii in xrange(nbootstraps):
                     tmp_af = af_average(patient_bootstrap(data['af_by_pat'][region]))
                     combined_entropy_bs[region].append((-np.log(tmp_af+1e-10)*tmp_af).sum(axis=0))
-                    minor_af_bs[region].append((tmp_af[:4,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:4,:].sum(axis=0)+1e-6))
+                    minor_af_bs[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
             elif bootstrap_type=='partition':
                 for ii in xrange(nbootstraps//2):
                     for a in patient_partition(data['af_by_pat'][region]):
                         tmp_af = af_average(a)
                         combined_entropy_part[region].append((-np.log(tmp_af+1e-10)*tmp_af).sum(axis=0))
-                        minor_af_part[region].append((tmp_af[:4,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:4,:].sum(axis=0)+1e-6))
-        synnonsyn[region] = 2*np.array([x for x in data['syn_by_pat'][region].values()]).sum(axis=0)>len(data['syn_by_pat'][region])
+                        minor_af_part[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
     if nbootstraps:
-        return combined_af, combined_entropy, minor_af, synnonsyn ,combined_entropy_bs, minor_af_bs
+        return combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs
     else:
-        return combined_af, combined_entropy, minor_af, synnonsyn
+        return combined_af, combined_entropy, minor_af
 
 def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None):
     '''
@@ -180,7 +178,7 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     cumulative figures of the frequency distributions
     '''
     plt.figure()
-    for ni, ind, label_str in ((0, ~synnonsyn[region], 'nonsynymous'), (2,synnonsyn[region], 'synonymous')):
+    for ni, ind, label_str in ((0, ~synnonsyn[region], 'nonsynonymous'), (2,synnonsyn[region], 'synonymous')):
         plt.plot(sorted(minor_af[region][ind]+0.00001), np.linspace(0,1,ind.sum()),
                 label=label_str+' n='+str(np.sum(ind)))
     plt.xscale('log')
@@ -259,7 +257,7 @@ def selcoeff_confidence(region, data, fname=None):
         plt.savefig(fname)
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser(description='nucleotide allele frequencies and saturation rate')
+    parser = argparse.ArgumentParser(description='nucleotide allele frequencies, saturation levels, and fitness costs')
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data")
     args = parser.parse_args()
@@ -284,9 +282,11 @@ if __name__=="__main__":
                 regions, ' got:',data['mut_rate'].keys())
 
 
-    combined_af, combined_entropy, minor_af,synnonsyn = process_average_allele_frequencies(data, nbootstraps=0)
+    combined_af, combined_entropy, minor_af = process_average_allele_frequencies(data, regions, nbootstraps=0)
 
-    mut_rate = 2e-5
+    synnonsyn = {region:2*np.array([x for x in data['syn_by_pat'][region].values()]).sum(axis=0)>len(data['syn_by_pat'][region])
+                    for region in regions}
+
     for region in regions:
         entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.pdf')
 

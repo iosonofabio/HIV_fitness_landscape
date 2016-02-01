@@ -266,22 +266,13 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
 def selection_coefficients(region,data, total_nonsyn_mutation_rates):
     nu_over_mu = []
     codons = data['init_codon'][region]
-    minor_af_by_pat = {pat: (x[:20,:].sum(axis=0) - x[:20,:].max(axis=0))/x[:20,:].sum(axis=0)
-                        for pat, x in data['af_by_pat'][region].iteritems()}
+    minor_af_by_pat = {pat: x[:20,:].sum(axis=0) - x[:20,:].argmax(axis=0) for pat, x in data['af_by_pat'][region].iteritems()}
 
     for pat in minor_af_by_pat:
-        tmp=[]
-        for pos, nu in enumerate(minor_af_by_pat[pat]):
-            if pos in codons[pat]:
-                tmp.append(nu/total_nonsyn_mutation_rates[codons[pat][pos]])
-            else:
-                tmp.append(0.0)
+        nu_over_mu.append([nu/total_nonsyn_mutation_rates[codon]
+                          for nu, codon in zip(minor_af_by_pat[pat], codons[pat])])
 
-        nu_over_mu.append(tmp)
-
-    nu_over_mu = np.ma.array(nu_over_mu)
-    nu_over_mu.mask = np.isnan(nu_over_mu)
-    return 1.0/nu_over_mu.mean(axis=0)
+    return 1.0/np.array(nu_over_mu).mean(axis=0)
 
 def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates):
     selcoeff = selection_coefficients(region, data, total_nonsyn_mutation_rates)
@@ -290,8 +281,8 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
 
     n=selcoeff.shape[0]
     plt.figure(figsize=(8,6))
-    plt.hist(selcoeff, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
-    plt.xscale('log')
+    plt.hist(selcoeff, color=cols[ni],
+             weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
 
 
 if __name__=="__main__":
