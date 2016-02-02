@@ -1,0 +1,23 @@
+region,feature,mutation,cost,error,normalized,error_norm,reference,full ref
+gag,gag,T242N,0.6->0.05 in 30 days,,0.08,,Martinez-Picado_fitness_2006,10.1128/JVI.80.7.3617–3623.2006
+pol,RT,L210W,0.4,0.2,0.0153846154,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,K70R,0.4,0.2,0.0153846154,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,Y181C,0.6,0.4,0.0230769231,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,K219Q,1.4,0.3,0.0538461538,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,L74V,2,0.1,0.0769230769,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,D76N,3.7,0.2,0.1423076923,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,M41L,4.5,0.7,0.1730769231,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,K103N,6.2,0.2,0.2384615385,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,T215Y,12.9,1,0.4961538462,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,M184V,14,0.7,0.5384615385,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,RT,K65R,29,0.5,1.1153846154,,Cong_fitness_2007,10.1128/JVI.02712-06
+pol,PR,M46I,0,,0,,Martinez-Picado_fitness_2000,10.1006/viro.2000.0527
+pol,PR,V82T,0,,0,,Martinez-Picado_fitness_2000,10.1006/viro.2000.0527
+pol,PR,L63P,0.27,0.02,0.15,,Martinez-Picado_fitness_2000,10.1006/viro.2000.0527
+pol,RT,G190A,0.33,0.05,0.33,,Wang_HIV-1_2006,10.1016/j.virol.2006.01.014
+pol,RT,G190S,0.59,0.06,0.59,,Wang_HIV-1_2006,10.1016/j.virol.2006.01.014
+pol,RT,K103N,0.06,0.03,0.06,,Koval_relative_2006,10.1016/j.virol.2006.05.021
+pol,RT,L100I,0.07,0.03,0.07,,Koval_relative_2006,10.1016/j.virol.2006.05.021
+pol,RT,V108I,0.01,0.01,0.01,,Koval_relative_2006,10.1016/j.virol.2006.05.021
+pol,RT,P225H,0.04,0.02,0.04,,Koval_relative_2006,10.1016/j.virol.2006.05.021
+pol,RT,P236L,0.4,0.06,0.4,,Koval_relative_2006,10.1016/j.virol.2006.05.021
