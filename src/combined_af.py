@@ -225,8 +225,8 @@ def selcoeff_confidence(region, data, fname=None):
     of how variable the estimates are. three such distributions are combined in one
     figure
     '''
-    (combined_af, combined_entropy, minor_af, synnonsyn ,combined_entropy_bs, minor_af_bs) = \
-        process_average_allele_frequencies(data, nbootstraps=100, bootstrap_type='bootstrap')
+    (combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs) = \
+        process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
     minor_af_array=np.array(minor_af_bs[region])
     qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
     scb = (data['mut_rate'][region]/(0.0001+qtiles)).T
@@ -288,11 +288,11 @@ if __name__=="__main__":
                     for region in regions}
 
     for region in regions:
-        entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.pdf')
+        entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.png')
 
         fraction_diverse(region, minor_af, synnonsyn, 'figures/'+region+'_minor_allele_frequency.pdf')
 
-        selcoeff_distribution(region, minor_af, synnonsyn,data['mut_rate'], 'figures/'+region+'_sel_coeff.pdf')
+        selcoeff_distribution(region, minor_af, synnonsyn,data['mut_rate'], 'figures/'+region+'_sel_coeff.png')
 
-        selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.pdf')
+        selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
 

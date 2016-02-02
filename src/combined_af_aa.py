@@ -25,7 +25,7 @@ def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
     from Bio.Seq import CodonTable
     CT = CodonTable.standard_dna_table.forward_table
     targets = [x for x,a in CT.iteritems() if a==der]
-    print(CT[initial_codon], initial_codon, targets)
+    #print(CT[initial_codon], initial_codon, targets)
     mut_rate=0
     for codon in targets:
         nmuts = sum([a!=d for a,d in zip(initial_codon, codon)])
@@ -42,15 +42,14 @@ def calc_amino_acid_mutation_rates():
         nuc_mutation_rates = cPickle.load(mutfile)['mu']
 
     CT = CodonTable.standard_dna_table.forward_table
-    aa_mutation_rates = {}
+    aa_mutation_rates = defaultdict(float)
     total_mutation_rates = defaultdict(float)
-    for aa1 in alphaal:
+    for codon in CT:
+        aa1 = CT[codon]
         for aa2 in alphaal:
             if aa1!=aa2:
-                tmp = {}
-                for codon in CT:
-                    if CT[codon]==aa1:
-                        tmp[codon] = aminoacid_mutation_rate(codon, aa2, nuc_mutation_rates)
+                aa_mutation_rates[(codon,aa2)] += aminoacid_mutation_rate(codon, aa2, nuc_mutation_rates)
+
     for codon,aa1 in CT.iteritems():
         for pos in range(3):
             for nuc in 'ACTG':
@@ -263,7 +262,18 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
         plt.savefig(fname)
 
 
-def selection_coefficients(region,data, total_nonsyn_mutation_rates):
+def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa):
+    target_ii = alphaal.index(target_aa)
+    codons = data['init_codon'][region]
+    minor_af_by_pat = {pat: x[target_ii,pos].sum(axis=0)/x[:20,pos].sum(axis=0)
+                        for pat, x in data['af_by_pat'][region].iteritems() if pos in codons[pat]}
+
+    print(pos, target_aa,[codons[pat][pos] for pat in codons], [aa_mutation_rates[(codons[pat][pos],target_aa)] for pat in codons])
+    nu_over_mu = [(1e-5+nu)/aa_mutation_rates[(codons[pat][pos],target_aa)] for pat, nu in minor_af_by_pat.iteritems()]
+    return 1.0/np.mean(nu_over_mu)
+
+
+def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates):
     nu_over_mu = []
     codons = data['init_codon'][region]
     minor_af_by_pat = {pat: (x[:20,:].sum(axis=0) - x[:20,:].max(axis=0))/x[:20,:].sum(axis=0)
@@ -275,7 +285,7 @@ def selection_coefficients(region,data, total_nonsyn_mutation_rates):
             if pos in codons[pat]:
                 tmp.append(nu/total_nonsyn_mutation_rates[codons[pat][pos]])
             else:
-                tmp.append(0.0)
+                tmp.append(np.nan)
 
         nu_over_mu.append(tmp)
 
@@ -284,7 +294,7 @@ def selection_coefficients(region,data, total_nonsyn_mutation_rates):
     return 1.0/nu_over_mu.mean(axis=0)
 
 def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates):
-    selcoeff = selection_coefficients(region, data, total_nonsyn_mutation_rates)
+    selcoeff = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
     selcoeff[selcoeff<0.001]=0.001
     selcoeff[selcoeff>0.1]=0.1
 
@@ -292,6 +302,61 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
     plt.figure(figsize=(8,6))
     plt.hist(selcoeff, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
     plt.xscale('log')
+
+
+def compare_experiments(data, aa_mutation_rates):
+    fc = pd.read_csv('data/fitness_costs.csv')
+    coefficients = {}
+    for ii, mut in fc.iterrows():
+        region = mut['region']
+        offset = offsets[mut['feature']]
+        aa, pos = mut['mutation'][-1], int(mut['mutation'][1:-1])+offset
+        coefficients[(mut['feature'], mut['mutation'])] = (mut['normalized'],
+            selection_coefficient_mutation(region, data, aa_mutation_rates, pos, aa))
+
+    return coefficients
+
+
+def plot_drug_resistance_mutations(data, aa_mutation_rates):
+    region='pol'
+    pcodes = data['init_codon'][region].keys()
+    for prot in drug_muts:
+        drug_afs = {}
+        drug_mut_rates = {}
+        offset = drug_muts[prot]['offset']
+        for cons_aa, pos, target_aa in drug_muts[prot]['mutations']:
+            codons = {pat:data['init_codon'][region][pat][pos+offset] for pat in pcodes}
+            mut_rates = {pat:np.sum([aa_mutation_rates[(codons[pat], aa)] for aa in target_aa])
+                        for pat in pcodes}
+            freqs = {pat:np.sum([data['af_by_pat'][region][pat][alphaal.index(aa), pos+offset]/data['af_by_pat'][region][pat][:20,pos+offset].sum()
+                        for aa in target_aa]) for pat in pcodes}
+
+
+            drug_afs[(cons_aa,pos,target_aa)] = freqs
+            drug_mut_rates[(cons_aa,pos,target_aa)] = mut_rates
+
+        plt.figure()
+        plt.title(prot)
+        drug_afs_items = sorted(drug_afs.items(), key=lambda x:x[0][1])
+        sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_afs_items]).T,
+                      columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True)
+        plt.yscale('log')
+        plt.ylim([3e-6, 1e-1])
+        plt.ylabel('minor variant frequency')
+        #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+        plt.tight_layout()
+
+
+        plt.figure()
+        plt.title(prot)
+        drug_mut_rates_items = sorted(drug_mut_rates.items(), key=lambda x:x[0][1])
+        sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_mut_rates_items]).T,
+                      columns = ["".join(map(str,x[0])) for x in drug_mut_rates_items]), jitter=True)
+        plt.yscale('log')
+        plt.ylim([3e-8, 1e-4])
+        plt.ylabel('mutation rate')
+        #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+        plt.tight_layout()
 
 
 if __name__=="__main__":
@@ -322,6 +387,8 @@ if __name__=="__main__":
     aa_ref='NL4-3'
 
     for region in regions:
+        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
+
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
 
@@ -329,5 +396,7 @@ if __name__=="__main__":
             print(phenotype)
             phenotype_scatter(region, combined_entropy, vals, phenotype)
 
+
+plot_drug_resistance_mutations(data, aa_mutation_rates)
 
 
