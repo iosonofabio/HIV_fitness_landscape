@@ -124,7 +124,7 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
     combined_entropy_bs={}
     for region in regions:
         combined_af[region] = af_average(data['af_by_pat'][region].values())
-        combined_entropy[region] = (-np.log(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
+        combined_entropy[region] = (-np.log2(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
         minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
         if nbootstraps:
             minor_af_bs[region]=[]
@@ -132,13 +132,13 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
             if bootstrap_type=='bootstrap':
                 for ii in xrange(nbootstraps):
                     tmp_af = af_average(patient_bootstrap(data['af_by_pat'][region]))
-                    combined_entropy_bs[region].append((-np.log(tmp_af+1e-10)*tmp_af).sum(axis=0))
+                    combined_entropy_bs[region].append((-np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0))
                     minor_af_bs[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
             elif bootstrap_type=='partition':
                 for ii in xrange(nbootstraps//2):
                     for a in patient_partition(data['af_by_pat'][region]):
                         tmp_af = af_average(a)
-                        combined_entropy_part[region].append((-np.log(tmp_af+1e-10)*tmp_af).sum(axis=0))
+                        combined_entropy_part[region].append((-np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0))
                         minor_af_part[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
     if nbootstraps:
         return combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs
@@ -256,13 +256,60 @@ def selcoeff_confidence(region, data, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
+def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference, fname=None):
+    fig = plt.figure()
+    ax=plt.subplot(111)
+    npoints=20
+    avg_sel_coeff = {}
+    #plt.title(region+' selection coefficients')
+    if type(regions)==str:
+        regions=[regions]
+    for ni,label_str in ((0,'synonymous'), (1,'nonsynonymous'), (2,'all')):
+        s=[]
+        entropy = []
+        for region in regions:
+            xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
+            ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
+            if label_str == 'all': ind = xsS>=0
+            s.append(mut_rate[region][ind]/(minor_af[region][ind]+0.0001))
+            entropy.append(xsS[ind])
+
+        s = np.concatenate(s)
+        entropy = np.concatenate(entropy)
+        if label_str!='all':
+            ax.scatter(entropy, s, c=cols[ni])
+
+        A = np.array(sorted(zip(entropy+0.001, s), key=lambda x:x[0]))
+#        ax.plot(np.exp(np.convolve(np.log(A[:,0]), 1.0*np.ones(npoints)/npoints, mode='valid')),
+#                    np.exp(np.convolve(np.log(A[:,1]), 1.0*np.ones(npoints)/npoints, mode='valid')), c=cols[ni], label=label_str, lw=3)
+#        ax.plot(np.convolve(A[:,0], 1.0*np.ones(npoints)/npoints, mode='valid'),
+#                np.convolve(A[:,1], 1.0*np.ones(npoints)/npoints, mode='valid'), c=cols[ni], label=label_str, lw=3)
+
+        entropy_thresholds =  np.array(np.linspace(0,A.shape[0],8), int)
+        avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), 1.0/np.mean(1.0/A[li:ui,1], axis=0)) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
+        #avg_sel_coeff[label_str] = np.array([np.median(A[li:ui,:], axis=0) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
+        ax.plot(avg_sel_coeff[label_str][:,0], avg_sel_coeff[label_str][:,1], lw=3)
+
+    ax.legend()
+    ax.set_yscale('log')
+    ax.set_xscale('log')
+    ax.set_ylabel('Fitness cost')
+    ax.set_xlabel('Variability in group M [bits]')
+
+    plt.tight_layout()
+    if fname is not None:
+        plt.savefig(fname)
+
+    return avg_sel_coeff
+
+
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='nucleotide allele frequencies, saturation levels, and fitness costs')
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data")
     args = parser.parse_args()
 
-    reference = HIVreference(refname='HXB2', subtype = 'B')
+    reference = HIVreference(refname='HXB2', subtype = 'any')
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
@@ -296,3 +343,7 @@ if __name__=="__main__":
 
         selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
 
+    avg_sel_coeff = selcoeff_vs_entropy(regions,  minor_af, synnonsyn,data['mut_rate'], reference, 'figures/'+region+'_sel_coeff_scatter.png')
+
+    with open('data/avg_selection_coeff.pkl', 'w') as ofile:
+        pickle.dump(avg_sel_coeff, ofile)
