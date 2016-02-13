@@ -317,7 +317,7 @@ def compare_experiments(data, aa_mutation_rates):
     return coefficients
 
 
-def plot_drug_resistance_mutations(data, aa_mutation_rates):
+def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     import matplotlib.patches as patches
     region='pol'
     pcodes = data['init_codon'][region].keys()
@@ -341,7 +341,6 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates):
             drug_afs[(cons_aa,pos,target_aa)] = freqs
             drug_mut_rates[(cons_aa,pos,target_aa)] = mut_rates
 
-        print(prot, drug_mut_rates,drug_afs)
         drug_afs_items.extend(filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values()))>0, sorted(drug_afs.items(), key=lambda x:x[0][1])))
         mut_types.append(len(drug_afs_items))
         print('Monomorphic:', prot, [''.join(map(str,x[0])) for x in filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values())    )==0, sorted(drug_afs.items(), key=lambda x:x[0][1]))])
@@ -363,12 +362,14 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates):
 
     #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
     sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_afs_items]).T,
-                  columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True)
+                  columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True, size=12)
     plt.yscale('log')
     plt.xticks(rotation=30)
     plt.ylabel('minor variant frequency', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
+    if fname is not None:
+        plt.savefig(fname)
 
 
 if __name__=="__main__":
@@ -398,17 +399,17 @@ if __name__=="__main__":
 
     aa_ref='NL4-3'
 
-#    for region in regions:
-#        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
-#
-#        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
-#        entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
-#
-#        for phenotype, vals in data['pheno'][region].iteritems():
-#            print(phenotype)
-#            phenotype_scatter(region, combined_entropy, vals, phenotype)
-#
+    for region in regions:
+        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
-plot_drug_resistance_mutations(data, aa_mutation_rates)
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
+        entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
+
+        for phenotype, vals in data['pheno'][region].iteritems():
+            print(phenotype)
+            phenotype_scatter(region, combined_entropy, vals, phenotype)
+
+
+plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
 
 
