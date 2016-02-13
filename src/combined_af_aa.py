@@ -60,15 +60,15 @@ def calc_amino_acid_mutation_rates():
     return aa_mutation_rates, total_mutation_rates
 
 
-drug_muts = {'PR':{'offset': 56 - 1,
+drug_muts = {'PI':{'offset': 56 - 1,
                     'mutations':  [('L', 24, 'I'), ('V', 32, 'I'), ('M', 46, 'IL'), ('I', 47, 'VA'),
                         ('G', 48, 'VM'), ('I', 50, 'LV'), ('I', 54, 'VTAM'), ('L', 76, 'V'),
                         ('V', 82, 'ATSF'), ('I', 84, 'V'), ('N', 88, 'S'), ('L', 90, 'M')]},
-             'RT_NRTI':{'offset':56 + 99 - 1,
+             'NRTI':{'offset':56 + 99 - 1,
                     'mutations': [('M', 41, 'L'),('K', 65, 'R'),('K', 70, 'ER'),('L', 74, 'VI'),
                                 ('Y', 115, 'F'),  ('M', 184,'VI'), ('L', 210,'W'), ('T', 215,'YF'), ('K', 219,'QE')]
                    },
-             'RT_NNRTI':{'offset':56 + 99 - 1,
+             'NNRTI':{'offset':56 + 99 - 1,
                     'mutations': [('L', 100, 'I'),('K', 101, 'PEH'), ('K', 103,'N'),
                                 ('V', 106, 'AM'),('E', 138, 'K'),('V', 179, 'DEF'), ('Y', 181, 'CIV'),
                                 ('Y', 188, 'LCH'),('G',190,'ASEQ'), ('F', 227,'LC'), ('M', 230,'L')]
@@ -318,9 +318,15 @@ def compare_experiments(data, aa_mutation_rates):
 
 
 def plot_drug_resistance_mutations(data, aa_mutation_rates):
+    import matplotlib.patches as patches
     region='pol'
     pcodes = data['init_codon'][region].keys()
-    for prot in drug_muts:
+    fig = plt.figure()
+    ax=plt.subplot(111)
+    drug_afs_items = []
+    mut_types = []
+    drug_classes = ['PI', 'NRTI', 'NNRTI']
+    for prot in drug_classes:
         drug_afs = {}
         drug_mut_rates = {}
         offset = drug_muts[prot]['offset']
@@ -335,28 +341,34 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates):
             drug_afs[(cons_aa,pos,target_aa)] = freqs
             drug_mut_rates[(cons_aa,pos,target_aa)] = mut_rates
 
-        plt.figure()
-        plt.title(prot)
-        drug_afs_items = sorted(drug_afs.items(), key=lambda x:x[0][1])
-        sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_afs_items]).T,
-                      columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True)
-        plt.yscale('log')
-        plt.ylim([3e-6, 1e-1])
-        plt.ylabel('minor variant frequency')
-        #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
-        plt.tight_layout()
+        print(prot, drug_mut_rates,drug_afs)
+        drug_afs_items.extend(filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values()))>0, sorted(drug_afs.items(), key=lambda x:x[0][1])))
+        mut_types.append(len(drug_afs_items))
+        print('Monomorphic:', prot, [''.join(map(str,x[0])) for x in filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values())    )==0, sorted(drug_afs.items(), key=lambda x:x[0][1]))])
 
+    plt.ylim([3e-5, 1e-1])
+    for mi in mut_types[:-1]:
+        plt.plot([mi-0.5,mi-0.5], plt.ylim(), c=(.3,.3,.3), lw=3, alpha=0.5)
 
-        plt.figure()
-        plt.title(prot)
-        drug_mut_rates_items = sorted(drug_mut_rates.items(), key=lambda x:x[0][1])
-        sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_mut_rates_items]).T,
-                      columns = ["".join(map(str,x[0])) for x in drug_mut_rates_items]), jitter=True)
-        plt.yscale('log')
-        plt.ylim([3e-8, 1e-4])
-        plt.ylabel('mutation rate')
-        #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
-        plt.tight_layout()
+    for ni, prot in enumerate(drug_classes):
+        plt.text(0.5*(mut_types[ni] + (mut_types[ni-1] if ni else 0))-0.5, 0.07, prot, fontsize=16, ha='center')
+
+    for mi in range(max(mut_types)):
+        c = 0.5 + 0.2*(mi%2)
+        ax.add_patch( patches.Rectangle(
+                (mi-0.5, plt.ylim()[0]),  1.0, plt.ylim()[1], #(x,y), width, height
+                color=(c,c,c), alpha=0.2
+            )
+        )
+
+    #plt.xticks(np.arange(len(all_muts)), ["".join(map(str, x)) for x in all_muts], rotation=60)
+    sns.stripplot(data=pd.DataFrame(np.array([x[1].values() for x in drug_afs_items]).T,
+                  columns = ["".join(map(str,x[0])) for x in drug_afs_items]), jitter=True)
+    plt.yscale('log')
+    plt.xticks(rotation=30)
+    plt.ylabel('minor variant frequency', fontsize=fs)
+    plt.tick_params(labelsize=fs*0.8)
+    plt.tight_layout()
 
 
 if __name__=="__main__":
@@ -386,16 +398,16 @@ if __name__=="__main__":
 
     aa_ref='NL4-3'
 
-    for region in regions:
-        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
-
-        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
-        entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
-
-        for phenotype, vals in data['pheno'][region].iteritems():
-            print(phenotype)
-            phenotype_scatter(region, combined_entropy, vals, phenotype)
-
+#    for region in regions:
+#        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
+#
+#        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
+#        entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
+#
+#        for phenotype, vals in data['pheno'][region].iteritems():
+#            print(phenotype)
+#            phenotype_scatter(region, combined_entropy, vals, phenotype)
+#
 
 plot_drug_resistance_mutations(data, aa_mutation_rates)
 
