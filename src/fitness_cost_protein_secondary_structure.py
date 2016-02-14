@@ -179,16 +179,29 @@ if __name__ == '__main__':
            .loc[:, 'af']
            .unstack('time_binc'))
 
-    def average_data(data):
+    def average_data(data, additional=[]):
+        '''Average data
+
+        Parameters
+           additional (list): other columns to stratify by
+        '''
         dav = (data
                .copy()
-               .loc[:, ['time_binc', 'syn', 'protein_secondary_structure', 'af']]
-               .groupby(['time_binc', 'syn', 'protein_secondary_structure'])
+               .loc[:, ['time_binc', 'syn', 'protein_secondary_structure', 'af'] + additional]
+               .groupby(['time_binc', 'syn', 'protein_secondary_structure'] + additional)
                .mean()
                .loc[:, 'af']
                #.unstack('time_binc')
               )
         return dav
+
+    # Have a look at the stratified data
+    print a.unstack('syn')[False].unstack('protein_secondary_structure')['B'].unstack('protein').loc[:, ['PR', 'IN', 'RT', 'gp120']]
+
+
+    sys.exit()
+
+
     from util import boot_strap_patients
     reps = pd.concat(boot_strap_patients(data, average_data, n_bootstrap=100),
                      axis=1)
