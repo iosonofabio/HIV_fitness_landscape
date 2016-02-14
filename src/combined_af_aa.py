@@ -204,7 +204,8 @@ def get_associations(regions, aa_ref='NL4-3'):
         associations[region]['protective'] = np.in1d(np.arange(L), np.unique(ppos))
     return associations
 
-def entropy_scatter(region, within_entropy, associations, reference, fname = None, annotate_protective=False):
+def entropy_scatter(region, within_entropy, associations, reference,
+                fname = None, annotate_protective=False, running_avg=True):
     '''
     scatter plot of cross-sectional entropy vs entropy of averaged
     intrapatient frequencies amino acid frequencies
@@ -217,10 +218,17 @@ def entropy_scatter(region, within_entropy, associations, reference, fname = Non
     print("Spearman:", rho, pval)
 
     plt.figure(figsize = (7,6))
+    npoints=20
     assoc_ind = associations[region]['HLA']|associations[region]['protective']
-    for ni, tmp_imd, label_str in ((2, ~assoc_ind, 'other'), (0, assoc_ind, 'HLA/protective')):
-        ind = (xsS>=0.000)&tmp_imd
+    for ni, tmp_imd, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
+        ind = (xsS>=0.000)&tmp_imd&(~np.isnan(xsS))&(~np.isnan(combined_entropy[region]))
         plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label=label_str, s=30)
+        if running_avg:
+            A = np.array(sorted(zip(combined_entropy[region][ind]+0.0000, xsS[ind]+0.005), key=lambda x:x[0]))
+            plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
+                        np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
+                        c=cols[ni], lw=3)
+
     if annotate_protective:
         A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
         for feat, positions in protective_positions[region].iteritems():
@@ -235,7 +243,7 @@ def entropy_scatter(region, within_entropy, associations, reference, fname = Non
     plt.yscale('log')
     plt.xscale('log')
     plt.ylim([0.001, 4])
-    plt.xlim([0.00001, .3])
+    plt.xlim([0.00001, 1.0])
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
     if fname is not None:
