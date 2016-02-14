@@ -190,19 +190,25 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
-def selcoeff_distribution(region, minor_af, synnonsyn, mut_rates, fname=None):
+def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None):
     '''
     produce figure of distribution of selection coefficients separately for
     synonymous and nonsynonymous sites.
     '''
     fig, axs = plt.subplots(1,2,sharey=True)
     #plt.title(region+' selection coefficients')
-    for ni,ax,ind, label_str in ((0,axs[0], synnonsyn[region], 'synonymous'), (1,axs[1], ~synnonsyn[region], 'nonsynonymous')):
-        s = mut_rates[region][ind]/(minor_af[region][ind]+0.0001)
+    if type(regions)==str:
+        regions = [regions]
+    for ni,ax,label_str in ((0,axs[0], 'synonymous'), (1,axs[1], 'nonsynonymous')):
+        slist = []
+        for region in regions:
+            ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
+            slist.extend(mut_rates[region][ind]/(minor_af[region][ind]+0.0001))
+        s = np.array(slist)
         s[s>=0.1] = 0.1
         s[s<=0.001] = 0.001
         ax.hist(s, color=cols[ni],
-                 weights=np.ones(ind.sum())/ind.sum(), bins=np.logspace(-3,-1,11), label=label_str)
+                 weights=np.ones(len(s), dtype=float)/len(s), bins=np.logspace(-3,-1,11), label=label_str+', n='+str(len(s)))
         ax.set_xscale('log')
         ax.tick_params(labelsize=fs*0.8)
         ax.text(0.1, 0.8, 'position: '+str(ni))
@@ -347,6 +353,9 @@ if __name__=="__main__":
         selcoeff_distribution(region, minor_af, synnonsyn,data['mut_rate'], 'figures/'+region+'_sel_coeff.png')
 
         selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
+
+
+    selcoeff_distribution(regions, minor_af, synnonsyn,data['mut_rate'], 'figures/all_sel_coeff.png')
 
     avg_sel_coeff = selcoeff_vs_entropy(regions,  minor_af, synnonsyn,data['mut_rate'], reference,
             fname='figures/'+region+'_sel_coeff_scatter.png', smoothing='harmonic')
