@@ -62,6 +62,7 @@ def plot_mutation_increase(data, mu=None, axs=None):
             ax=axs[0]
             color = cmap[transitions.index(mut)]
             marker='o'
+            ls='-o'
         else:
             ax=axs[1]
             if mut in transversions_pair:
@@ -69,24 +70,25 @@ def plot_mutation_increase(data, mu=None, axs=None):
                 color = cmap[transversions_pair.index(mut)]
                 marker='o'
             else:
-                ls='-o'
+                ls='-v'
                 color = cmap[transversions_np.index(mut)]
                 marker='v'
 
         times = np.array(aft.index) + 100*(np.random.random(size=len(aft))-0.5)
         aft = np.array(aft)
-        ax.errorbar(times[:-1], aft[:-1], np.array(stderr[mut][:-1]), ls='none',
-                    marker=marker, markersize=10, lw=3, label=mut, color=color)
+        ax.errorbar(times, aft, np.array(stderr[mut]), ls='none',
+                    marker=marker, markersize=10, lw=3, color=color)
 
         # Plot fit
         if mu is not None:
-            xfit = np.insert(times, 0, 0)
+            xfit = np.array([-100,3000])
             yfit = xfit * mu.loc[mut]
-            ax.plot(xfit, yfit, ls=ls[:-1], lw=1.5, color=color, alpha=0.7)
+            ax.plot(xfit, yfit, ls, lw=2.5, color=color, alpha=0.7, label=mut)
 
     for ax in axs:
         ax.legend(loc=2, ncol=2, numpoints=2)
-        ax.set_xlim([0,2000])
+        ax.set_xlim([0,2700])
+        ax.set_ylim(0)
         ax.set_xlabel('days since EDI', fontsize=16)
         ax.set_ylabel('fraction mutated', fontsize=16)
         ax.tick_params(axis='both', labelsize=18)
@@ -209,7 +211,7 @@ def get_mutation_matrix_per_sample(data, plot=False):
             plt.plot(times,rate*times, '-')
             plt.title(mut+': '+str(rate))
             plt.legend(loc=2, ncol=2)
-    rates[mut] = rate
+        rates[mut] = rate
 
     mu = pd.Series(rates)
     mu.name = 'mutation rate from longitudinal data'
@@ -311,7 +313,8 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
     R = pearsonr(x, y)[0]
     rho = spearmanr(x, y)[0]
 
-    label = 'Pearson r = {0:3.0%},\nSpearman r = {1:3.0%}'.format(R, rho)
+    label = r'Pearson $r = {0:3.0%}$'.format(R)+'\n'+r'Spearman $\rho = {0:3.0%}$'.format(rho)
+    label = label.replace('%','\%')
 
     ax.errorbar(x, y,
                 xerr=dx, yerr=dy,
@@ -327,8 +330,8 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
-    ax.set_xlabel('log10 (new estimate)', fontsize=fs)
-    ax.set_ylabel('log10 (Abram et al. 2010)', fontsize=fs)
+    ax.set_xlabel(r'$\log_{10}(\mathrm{new\ estimate})$', fontsize=fs)
+    ax.set_ylabel(r'$\log_{10}(\mathrm{Abram\ et\ al.\ 2010})$', fontsize=fs)
     ax.xaxis.set_tick_params(labelsize=fs)
     ax.yaxis.set_tick_params(labelsize=fs)
     ax.legend(loc=2, fontsize=fs)
@@ -428,8 +431,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     fn = '../data/mutation_rate_data.pickle'
+    patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
     if not os.path.isfile(fn) or args.regenerate:
-        patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
         cov_min = 100
         data = collect_data(patients, cov_min=cov_min)
         data.to_pickle(fn)
@@ -437,7 +440,7 @@ if __name__ == '__main__':
         data = pd.read_pickle(fn)
 
     # Make time bins
-    t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
+    t_bins = np.array([0, 500, 1000, 1750, 3000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
