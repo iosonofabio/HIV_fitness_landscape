@@ -105,7 +105,7 @@ def collect_data(patient_codes, regions, reference):
             print("Can't load patient", pcode)
     for region in regions:
         combined_af_by_pat[region], syn_nonsyn_by_pat[region] = collect_weighted_afs(region, patients, reference)
-        consensus_mutation_rate[region] = np.array([total_muts[nuc] for nuc in
+        consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc!='-' else np.nan for nuc in
                             reference.annotation[region].extract("".join(reference.consensus))])
 
     return {'af_by_pat':combined_af_by_pat, 'mut_rate':consensus_mutation_rate, 'syn_by_pat':syn_nonsyn_by_pat}
