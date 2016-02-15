@@ -23,6 +23,8 @@ from hivevo.sequence import alpha, alphal
 from util import add_binned_column, boot_strap_patients
 
 
+
+# Functions
 def plot_mutation_increase(data, mu=None, axs=None):
     '''Plot accumulation of mutations and fits'''
     cmap = sns.color_palette()
@@ -57,7 +59,11 @@ def plot_mutation_increase(data, mu=None, axs=None):
     else:
         savefig = False
 
-    for mut, aft in d.iterrows():
+    mlist = ['A->G', 'C->T', 'G->A', 'T->C',
+             'A->C', 'A->T', 'C->A', 'C->G',
+             'G->T', 'G->C', 'T->G', 'T->A']
+    for mut in mlist:
+        aft = d.loc[mut]
         if mut in transitions:
             ax=axs[0]
             color = cmap[transitions.index(mut)]
@@ -76,22 +82,38 @@ def plot_mutation_increase(data, mu=None, axs=None):
 
         times = np.array(aft.index) + 100*(np.random.random(size=len(aft))-0.5)
         aft = np.array(aft)
-        ax.errorbar(times, aft, np.array(stderr[mut]), ls='none',
-                    marker=marker, markersize=10, lw=3, color=color)
+        if mu is None:
+            label = mut[0] + u' \u2192 ' + mut[-1]
+        else:
+            label = None
+
+        ax.errorbar(times, aft, np.array(stderr[mut]),
+                    ls='none',
+                    marker=marker,
+                    markersize=10,
+                    lw=3,
+                    color=color)
 
         # Plot fit
         if mu is not None:
             xfit = np.array([-100,3000])
             yfit = xfit * mu.loc[mut]
-            ax.plot(xfit, yfit, ls, lw=2.5, color=color, alpha=0.7, label=mut)
+            label = mut[0] + u' \u2192 ' + mut[-1]
+            ax.plot(xfit, yfit,
+                    ls,
+                    lw=2.5,
+                    color=color,
+                    alpha=0.7,
+                    label=label)
 
     for ax in axs:
-        ax.legend(loc=2, ncol=2, numpoints=2)
+        ax.legend(loc=2, ncol=2, numpoints=2, fontsize=16)
         ax.set_xlim([0,2700])
         ax.set_ylim(0)
         ax.set_xlabel('days since EDI', fontsize=16)
         ax.set_ylabel('fraction mutated', fontsize=16)
         ax.tick_params(axis='both', labelsize=18)
+        ax.grid(True)
 
     plt.tight_layout()
 
@@ -99,9 +121,6 @@ def plot_mutation_increase(data, mu=None, axs=None):
         plt.savefig('mutation_linear_increase.png')
 
 
-
-
-# Functions
 def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
     '''Get the mutation rate matrix from Abram 2010'''
     muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
@@ -273,6 +292,8 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False, ax=None):
                 color=color,
                )
 
+    ax.grid(False)
+
     plt.tight_layout()
 
     if savefig:
@@ -313,7 +334,9 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
     R = pearsonr(x, y)[0]
     rho = spearmanr(x, y)[0]
 
-    label = r'Pearson $r = {0:3.0%}$'.format(R)+'\n'+r'Spearman $\rho = {0:3.0%}$'.format(rho)
+    label = (r'Pearson $r = {0:3.0%}$'.format(np.round(R, 2))+
+             '\n'+
+             r'Spearman $\rho = {0:3.0%}$'.format(np.round(rho, 2)))
     label = label.replace('%','\%')
 
     ax.errorbar(x, y,
