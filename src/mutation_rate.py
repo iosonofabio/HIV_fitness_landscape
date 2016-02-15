@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from collections import defaultdict
 from Bio.Seq import translate
 
 from hivevo.patients import Patient
@@ -26,8 +26,8 @@ from util import add_binned_column, boot_strap_patients
 def plot_mutation_increase(data, mu=None, axs=None):
     '''Plot accumulation of mutations and fits'''
     cmap = sns.color_palette()
-    transitions =  ['A->G', 'G->A', 'T->C', 'C->T']
-    transversions_pair = ['A->T', 'G->C', 'T->A', 'C->G']
+    transitions =  ['A->G','C->T', 'G->A', 'T->C']
+    transversions_pair = ['A->T', 'C->G',  'G->C', 'T->A']
     transversions_np = ['A->C', 'C->A', 'G->T', 'T->G']
 
     d = (data
@@ -37,28 +37,46 @@ def plot_mutation_increase(data, mu=None, axs=None):
          .unstack('time_binc')
          .loc[:, 'af'])
 
+    dsamples = (data
+         .loc[:, ['af', 'time', 'time_binc', 'mut']]
+         .groupby(['mut', 'time'])
+         .mean())
+    sampleavg = {}
+    for mut, aft in dsamples.iterrows():
+        if mut[0] not in sampleavg:
+            sampleavg[mut[0]] = defaultdict(list)
+        sampleavg[mut[0]][aft['time_binc']].append(aft['af'])
+    stderr = defaultdict(list)
+    for mut in sampleavg:
+        for t in sorted(sampleavg[mut].keys()):
+            stderr[mut].append(np.std(sampleavg[mut][t])/np.sqrt(len(sampleavg[mut][t])-1))
+
     if axs is None:
         savefig = True
         fig, axs = plt.subplots(1,2, figsize=(12,6))
     else:
         savefig = False
-    
+
     for mut, aft in d.iterrows():
         if mut in transitions:
             ax=axs[0]
             color = cmap[transitions.index(mut)]
+            marker='o'
         else:
             ax=axs[1]
             if mut in transversions_pair:
                 ls='--o'
                 color = cmap[transversions_pair.index(mut)]
+                marker='o'
             else:
                 ls='-o'
                 color = cmap[transversions_np.index(mut)]
+                marker='v'
 
-        times = np.array(aft.index)
+        times = np.array(aft.index) + 100*(np.random.random(size=len(aft))-0.5)
         aft = np.array(aft)
-        ax.plot(times[:-1], aft[:-1], ls, lw=3, label=mut, color=color)
+        ax.errorbar(times[:-1], aft[:-1], np.array(stderr[mut][:-1]), ls='none',
+                    marker=marker, markersize=10, lw=3, label=mut, color=color)
 
         # Plot fit
         if mu is not None:
@@ -77,6 +95,7 @@ def plot_mutation_increase(data, mu=None, axs=None):
 
     if savefig:
         plt.savefig('mutation_linear_increase.png')
+
 
 
 
@@ -151,6 +170,46 @@ def get_mutation_matrix(data):
         aft = np.array(aft)
         rate = np.inner(aft, times) / np.inner(times, times)
         rates[mut] = rate
+
+    mu = pd.Series(rates)
+    mu.name = 'mutation rate from longitudinal data'
+    return mu
+
+def get_mutation_matrix_per_sample(data, plot=False):
+    '''Calculate the mutation rate matrix'''
+    aft_by_mut_pat = defaultdict(dict)
+    for pcode in patients:
+        d2 = (data
+             .loc[data.loc[:,'pcode']==pcode, ['af', 'time', 'mut']]
+             .groupby(['mut', 'time'])
+             .mean()
+             .unstack('time')
+             .loc[:, 'af'])
+        for mut, aft in d2.iterrows():
+            times = np.array(aft.index)
+            aft = np.array(aft)
+            aft_by_mut_pat[mut][pcode]= (times, aft)
+
+    rates = {}
+    for mut, samples in aft_by_mut_pat.iteritems():
+        times = []
+        aft = []
+        if plot:
+            plt.figure()
+        for pcode in patients:
+            (t,nu) = samples[pcode]
+            aft.extend(nu)
+            times.extend(t)
+            if plot:
+                plt.plot(t,nu, 'o', label=pcode)
+        aft = np.array(aft)
+        times = np.array(times)
+        rate = np.inner(aft, times) / np.inner(times, times)
+        if plot:
+            plt.plot(times,rate*times, '-')
+            plt.title(mut+': '+str(rate))
+            plt.legend(loc=2, ncol=2)
+    rates[mut] = rate
 
     mu = pd.Series(rates)
     mu.name = 'mutation rate from longitudinal data'
@@ -328,7 +387,7 @@ def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
 
                 # Keep only high-entropy sites
                 S_pos = ref.entropy[comap.loc[pos]]
-                if S_pos < 0.01:
+                if S_pos < 0.1:
                     continue
 
                 # Keep only synonymous alleles
