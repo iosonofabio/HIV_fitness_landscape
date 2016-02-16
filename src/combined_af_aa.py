@@ -281,25 +281,39 @@ def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_
     return 1.0/np.mean(nu_over_mu)
 
 
-def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates):
-    nu_over_mu = []
+def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nbootstraps=None):
     codons = data['init_codon'][region]
     minor_af_by_pat = {pat: (x[:20,:].sum(axis=0) - x[:20,:].max(axis=0))/x[:20,:].sum(axis=0)
                         for pat, x in data['af_by_pat'][region].iteritems()}
 
-    for pat in minor_af_by_pat:
-        tmp=[]
-        for pos, nu in enumerate(minor_af_by_pat[pat]):
-            if pos in codons[pat]:
-                tmp.append(nu/total_nonsyn_mutation_rates[codons[pat][pos]])
-            else:
-                tmp.append(np.nan)
+    if nbootstraps is None:
+        pat_sets = [minor_af_by_pat.keys()]
+    else:
+        pats = minor_af_by_pat.keys()
+        pat_sets = [[pats[ii] for ii in np.random.randint(len(pats), size=len(pats))] for jj in range(nbootstraps)]
+    s_bs = []
+    for pat_set in pat_sets:
+        nu_over_mu = []
+        for pat in pat_set:
+            tmp=[]
+            for pos, nu in enumerate(minor_af_by_pat[pat]):
+                if pos in codons[pat]:
+                    tmp.append(nu/total_nonsyn_mutation_rates[codons[pat][pos]])
+                else:
+                    tmp.append(np.nan)
 
-        nu_over_mu.append(tmp)
+            nu_over_mu.append(tmp)
 
-    nu_over_mu = np.ma.array(nu_over_mu)
-    nu_over_mu.mask = np.isnan(nu_over_mu)
-    return 1.0/nu_over_mu.mean(axis=0)
+        tmp_nu_over_mu = np.ma.array(nu_over_mu)
+        tmp_nu_over_mu.mask = np.isnan(nu_over_mu)
+        #import ipdb; ipdb.set_trace()
+        tmp_s = 1.0/(tmp_nu_over_mu.mean(axis=0)+1e-5)
+        tmp_s[tmp_s.mask] = np.nan
+        s_bs.append(tmp_s)
+    if nbootstraps is None:
+        return s_bs[-1]
+    else:
+        return np.array(s_bs)
 
 def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates):
     selcoeff = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
@@ -378,6 +392,29 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     plt.tight_layout()
     if fname is not None:
         plt.savefig(fname)
+
+def export_selection_coefficients(data, total_nonsyn_mutation_rates):
+    from scipy.stats import scoreatpercentile
+    def sel_out(s):
+        if s<0.001:
+            return '<0.001'
+        elif s>0.1:
+            return '>0.1'
+        else:
+            return s
+
+    for region in data['af_by_pat']:
+        sel_array = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=100)
+        selcoeff={}
+        for q in [25, 50, 75]:
+            selcoeff[q] = scoreatpercentile(sel_array, q, axis=0)
+
+        with open('data/'+region+'_selection_coeffcients.tsv','w') as selfile:
+            selfile.write('### selection coefficients in '+region+'\n')
+            selfile.write('# position\tlower quartile\tmedian\tupper quartile\n')
+
+            for pos in xrange(selcoeff[25].shape[0]):
+                selfile.write('\t'.join(map(str,[pos+1]+[sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
 
 if __name__=="__main__":
