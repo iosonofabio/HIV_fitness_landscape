@@ -160,7 +160,7 @@ def plot_fit(data_to_fit, mu, s):
     ax.text(0, 0.023,
             r'$\mu = 1.1 \cdot 10^{-5}$ per day',
             fontsize=16)
-    ax.plot([200, 1300], [0.007, 0.007 + (1300 - 200) * muNS], lw=1.5, c='k')
+    ax.plot([200, 1300], [0.007, 0.007 + (1300 - 200) * mu], lw=1.5, c='k')
 
     # PANEL B: costs
     ax = axs[1]
