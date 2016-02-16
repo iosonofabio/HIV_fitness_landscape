@@ -126,6 +126,9 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
         combined_af[region] = af_average(data['af_by_pat'][region].values())
         combined_entropy[region] = (-np.log2(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
         minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
+        #ind = combined_af[region][:nstates,:].sum(axis=0)<0.5
+        #minor_af[region][ind]=np.nan
+        #combined_entropy[region][ind]=np.nan
         if nbootstraps:
             minor_af_bs[region]=[]
             combined_entropy_bs[region]=[]
@@ -134,6 +137,9 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
                     tmp_af = af_average(patient_bootstrap(data['af_by_pat'][region]))
                     combined_entropy_bs[region].append((-np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0))
                     minor_af_bs[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
+                    #ind = tmp_af[:nstates,:].sum(axis=0)<0.5
+                    #minor_af_bs[region][-1][ind]=np.nan
+                    #combined_entropy_bs[region][-1][ind]=np.nan
             elif bootstrap_type=='partition':
                 for ii in xrange(nbootstraps//2):
                     for a in patient_partition(data['af_by_pat'][region]):
