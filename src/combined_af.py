@@ -196,11 +196,14 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
-def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None):
+def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None, ref=None):
     '''
     produce figure of distribution of selection coefficients separately for
     synonymous and nonsynonymous sites.
     '''
+    if ref is not None:
+        if not hasattr(ref, 'fitness_cost'):
+            ref.fitness_cost = np.zeros_like(ref.entropy)
     fig, axs = plt.subplots(1,2,sharey=True)
     #plt.title(region+' selection coefficients')
     if type(regions)==str:
@@ -213,6 +216,10 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None):
         s = np.array(slist)
         s[s>=0.1] = 0.1
         s[s<=0.001] = 0.001
+        if ref is not None:
+            bg = ref.annotation[region].location.start
+            ed = ref.annotation[region].location.end
+            ref.fitness_cost[bg:ed][ind] = s
         ax.hist(s, color=cols[ni],
                  weights=np.ones(len(s), dtype=float)/len(s), bins=np.logspace(-3,-1,11), label=label_str+', n='+str(len(s)))
         ax.set_xscale('log')
@@ -326,7 +333,7 @@ if __name__=="__main__":
                         help="regenerate data")
     args = parser.parse_args()
 
-    reference = HIVreference(refname='HXB2', subtype = 'any')
+    reference = HIVreference(refname='HXB2', subtype = 'B')
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
@@ -356,7 +363,7 @@ if __name__=="__main__":
 
         fraction_diverse(region, minor_af, synnonsyn, 'figures/'+region+'_minor_allele_frequency.pdf')
 
-        selcoeff_distribution(region, minor_af, synnonsyn,data['mut_rate'], 'figures/'+region+'_sel_coeff.png')
+        selcoeff_distribution(region, minor_af, synnonsyn, data['mut_rate'], 'figures/'+region+'_sel_coeff.png', ref=reference)
 
         selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
 
