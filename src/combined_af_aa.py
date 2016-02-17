@@ -339,6 +339,46 @@ def compare_experiments(data, aa_mutation_rates):
     return coefficients
 
 
+def compare_hinkley(data, reference, total_nonsyn_mutation_rates, fname=None):
+    from parse_hinkley import parse_hinkley
+    cutoff=0.1
+    hinkley_cost = {}
+    hfit = parse_hinkley()
+    selcoeff = selection_coefficients_per_site('pol', data, total_nonsyn_mutation_rates)
+    ref_aa = np.array(reference.seq.seq.translate())
+    past_cutoff = selcoeff>cutoff
+    selcoeff[past_cutoff]=cutoff
+    selcoeff[selcoeff<0.0003]=0.0003
+    non_consensus = []
+    for prot, pos in hfit:
+        ref_pos = pos+offsets[prot]+1
+        #consensus = reference.consensus[ref_pos]
+        consensus = ref_aa[ref_pos]
+        s = selcoeff[ref_pos]
+        if consensus in hfit[(prot,pos)]:
+            tmp_non_cons = [val for aa, val in hfit[(prot,pos)].iteritems() if aa!=consensus]
+            non_consensus.extend(tmp_non_cons)
+            if len(hfit[(prot,pos)])>1 and (not past_cutoff[ref_pos]):
+                gaps = np.diff(sorted(hfit[(prot,pos)].values(),reverse=True))
+                hinkley_cost[(prot, pos)] = (s, hfit[(prot,pos)][consensus],\
+                    np.max(tmp_non_cons), -gaps[0])
+        else:
+            print('Not found',consensus,' in:', prot,pos,hfit[(prot,pos)].keys())
+
+    s_array = np.array(hinkley_cost.values())
+    plt.figure()
+    plt.scatter(s_array[:,0], s_array[:,1]-s_array[:,2])
+    plt.xscale('log')
+    plt.xlim([0.001, 0.2])
+    plt.xlabel('fitness cost')
+    plt.ylabel('Hinkley fitess effect')
+    print(spearmanr(s_array[:,0], s_array[:,1]-s_array[:,2]))
+    if fname is not None:
+        plt.savefig(fname)
+
+    return hinkley_cost
+
+
 def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     import matplotlib.patches as patches
     region='pol'
@@ -442,12 +482,15 @@ if __name__=="__main__":
     associations = get_associations(regions)
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
 
+
     aa_ref='NL4-3'
 
     for region in regions:
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
+        if region=='pol':
+            compare_hinkley(data,reference, total_nonsyn_mutation_rates, fname='figures/hinkley_comparison.pdf')
         entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
 
         for phenotype, vals in data['pheno'][region].iteritems():
