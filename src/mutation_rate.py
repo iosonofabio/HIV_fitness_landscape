@@ -7,21 +7,120 @@ content:    Make figure for the mutation rate.
 # Modules
 import os
 import sys
+import argparse
 from itertools import izip
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from collections import defaultdict
 from Bio.Seq import translate
 
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
 
+from util import add_binned_column, boot_strap_patients
+
 
 
 # Functions
+def plot_mutation_increase(data, mu=None, axs=None):
+    '''Plot accumulation of mutations and fits'''
+    cmap = sns.color_palette()
+    transitions =  ['A->G','C->T', 'G->A', 'T->C']
+    transversions_pair = ['A->T', 'C->G',  'G->C', 'T->A']
+    transversions_np = ['A->C', 'C->A', 'G->T', 'T->G']
+
+    d = (data
+         .loc[:, ['af', 'time_binc', 'mut']]
+         .groupby(['mut', 'time_binc'])
+         .mean()
+         .unstack('time_binc')
+         .loc[:, 'af'])
+
+    dsamples = (data
+         .loc[:, ['af', 'time', 'time_binc', 'mut']]
+         .groupby(['mut', 'time'])
+         .mean())
+    sampleavg = {}
+    for mut, aft in dsamples.iterrows():
+        if mut[0] not in sampleavg:
+            sampleavg[mut[0]] = defaultdict(list)
+        sampleavg[mut[0]][aft['time_binc']].append(aft['af'])
+    stderr = defaultdict(list)
+    for mut in sampleavg:
+        for t in sorted(sampleavg[mut].keys()):
+            stderr[mut].append(np.std(sampleavg[mut][t])/np.sqrt(len(sampleavg[mut][t])-1))
+
+    if axs is None:
+        savefig = True
+        fig, axs = plt.subplots(1,2, figsize=(12,6))
+    else:
+        savefig = False
+
+    mlist = ['A->G', 'C->T', 'G->A', 'T->C',
+             'A->C', 'A->T', 'C->A', 'C->G',
+             'G->T', 'G->C', 'T->G', 'T->A']
+    for mut in mlist:
+        aft = d.loc[mut]
+        if mut in transitions:
+            ax=axs[0]
+            color = cmap[transitions.index(mut)]
+            marker='o'
+            ls='-o'
+        else:
+            ax=axs[1]
+            if mut in transversions_pair:
+                ls='--o'
+                color = cmap[transversions_pair.index(mut)]
+                marker='o'
+            else:
+                ls='-v'
+                color = cmap[transversions_np.index(mut)]
+                marker='v'
+
+        times = np.array(aft.index) + 100*(np.random.random(size=len(aft))-0.5)
+        aft = np.array(aft)
+        if mu is None:
+            label = mut[0] + u' \u2192 ' + mut[-1]
+        else:
+            label = None
+
+        ax.errorbar(times, aft, np.array(stderr[mut]),
+                    ls='none',
+                    marker=marker,
+                    markersize=10,
+                    lw=3,
+                    color=color)
+
+        # Plot fit
+        if mu is not None:
+            xfit = np.array([-100,3000])
+            yfit = xfit * mu.loc[mut]
+            label = mut[0] + u' \u2192 ' + mut[-1]
+            ax.plot(xfit, yfit,
+                    ls,
+                    lw=2.5,
+                    color=color,
+                    alpha=0.7,
+                    label=label)
+
+    for ax in axs:
+        ax.legend(loc=2, ncol=2, numpoints=2, fontsize=16)
+        ax.set_xlim([0,2700])
+        ax.set_ylim(0)
+        ax.set_xlabel('days since EDI', fontsize=16)
+        ax.set_ylabel('fraction mutated', fontsize=16)
+        ax.tick_params(axis='both', labelsize=18)
+        ax.grid(True)
+
+    plt.tight_layout()
+
+    if savefig:
+        plt.savefig('mutation_linear_increase.png')
+
+
 def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
     '''Get the mutation rate matrix from Abram 2010'''
     muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
@@ -77,36 +176,6 @@ def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
                 'std': std}
 
 
-def add_binned_column(df, bins, to_bin):
-    # FIXME: this works, but is a little cryptic
-    df.loc[:, to_bin+'_bin'] = np.minimum(len(bins)-2,
-                                          np.maximum(0,np.searchsorted(bins, df.loc[:,to_bin])-1))
-
-
-def boot_strap_patients(df, eval_func, columns=None,  n_bootstrap=100):
-    import pandas as pd
-
-    if columns is None:
-        columns = df.columns
-    if 'pcode' not in columns:
-        columns = list(columns)+['pcode']
-
-    patients = df.loc[:,'pcode'].unique()
-    tmp_df_grouped = df.loc[:,columns].groupby('pcode')
-    npats = len(patients)
-    replicates = []
-    for i in xrange(n_bootstrap):
-        if (i%20==0): print("Bootstrap",i)
-        pats = patients[np.random.randint(0,npats, size=npats)]
-        bs = []
-        for pi,pat in enumerate(pats):
-            bs.append(tmp_df_grouped.get_group(pat))
-            bs[-1]['pcode']='BS'+str(pi+1)
-        bs = pd.concat(bs)
-        replicates.append(eval_func(bs))
-    return replicates
-
-
 def get_mutation_matrix(data):
     '''Calculate the mutation rate matrix'''
     d = (data
@@ -127,15 +196,60 @@ def get_mutation_matrix(data):
     mu.name = 'mutation rate from longitudinal data'
     return mu
 
+def get_mutation_matrix_per_sample(data, plot=False):
+    '''Calculate the mutation rate matrix'''
+    aft_by_mut_pat = defaultdict(dict)
+    for pcode in patients:
+        d2 = (data
+             .loc[data.loc[:,'pcode']==pcode, ['af', 'time', 'mut']]
+             .groupby(['mut', 'time'])
+             .mean()
+             .unstack('time')
+             .loc[:, 'af'])
+        for mut, aft in d2.iterrows():
+            times = np.array(aft.index)
+            aft = np.array(aft)
+            aft_by_mut_pat[mut][pcode]= (times, aft)
 
-def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
+    rates = {}
+    for mut, samples in aft_by_mut_pat.iteritems():
+        times = []
+        aft = []
+        if plot:
+            plt.figure()
+        for pcode in patients:
+            (t,nu) = samples[pcode]
+            aft.extend(nu)
+            times.extend(t)
+            if plot:
+                plt.plot(t,nu, 'o', label=pcode)
+        aft = np.array(aft)
+        times = np.array(times)
+        rate = np.inner(aft, times) / np.inner(times, times)
+        if plot:
+            plt.plot(times,rate*times, '-')
+            plt.title(mut+': '+str(rate))
+            plt.legend(loc=2, ncol=2)
+        rates[mut] = rate
+
+    mu = pd.Series(rates)
+    mu.name = 'mutation rate from longitudinal data'
+    return mu
+
+
+def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False, ax=None):
     from matplotlib import cm
     sns.set_style('dark')
 
     fig_width = 5
     fs = 16
 
-    fig, ax = plt.subplots(figsize=(fig_width, fig_width))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(fig_width, fig_width))
+        ax.set_title(mu.name+'\n[$\log_{10}$ changes $\cdot$ day$^{-1}$]',
+                     fontsize=fs)
+    else:
+        ax.set_title('$\log_{10}$ changes $\cdot$ day$^{-1}$', fontsize=fs)
 
     M = np.zeros((4, 4))
     for mut, rate in mu.iteritems():
@@ -157,8 +271,6 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
     ax.yaxis.set_tick_params(labelsize=fs)
     ax.set_ylabel('From', fontsize=fs)
     ax.set_xlabel('To', fontsize=fs)
-    ax.set_title(mu.name+'\n[$\log_{10}$ changes $\cdot$ day$^{-1}$]',
-                 fontsize=fs)
 
     for mut, rate in mu.iteritems():
         i_from = alphal.index(mut[0])
@@ -167,7 +279,7 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
             color = 'black'
         else:
             color = 'white'
-        
+
         txt = '{:1.1f}'.format(np.log10(rate))
         if dmulog10 is not None:
             txt = '$'+txt+' \pm '+'{:1.1f}'.format(dmulog10[mut])+'$'
@@ -180,8 +292,10 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
                 color=color,
                )
 
+    ax.grid(False)
+
     plt.tight_layout()
-    
+
     if savefig:
         fig_filename = '/home/fabio/university/phd/thesis/tex/figures/mutation_rate_matrix_neutralclass'
         for ext in ['svg', 'pdf', 'png']:
@@ -191,13 +305,15 @@ def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False):
     plt.show()
 
 
-def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
+def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
     '''Compare new estimate for mu with Abram et al 2010'''
     xmin = -7.3
     xmax = -4
     fs = 16
 
-    fig, ax = plt.subplots()
+    if ax is None:
+        fig, ax = plt.subplots()
+
     x = []
     y = []
     for key in mu.index:
@@ -218,11 +334,14 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
     R = pearsonr(x, y)[0]
     rho = spearmanr(x, y)[0]
 
-    label = 'Pearson r = {0:3.0%},\nSpearman r = {1:3.0%}'.format(R, rho)
+    label = (r'Pearson $r = {0:3.0%}$'.format(np.round(R, 2))+
+             '\n'+
+             r'Spearman $\rho = {0:3.0%}$'.format(np.round(rho, 2)))
+    label = label.replace('%','\%')
 
     ax.errorbar(x, y,
                 xerr=dx, yerr=dy,
-                ls='o',
+                ls='none',
                 ms=10,
                 marker='o',
                 label=label)
@@ -234,8 +353,8 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(xmin, xmax)
-    ax.set_xlabel('log10 (new estimate)', fontsize=fs)
-    ax.set_ylabel('log10 (Abram et al. 2010)', fontsize=fs)
+    ax.set_xlabel(r'$\log_{10}(\mathrm{new\ estimate})$', fontsize=fs)
+    ax.set_ylabel(r'$\log_{10}(\mathrm{Abram\ et\ al.\ 2010})$', fontsize=fs)
     ax.xaxis.set_tick_params(labelsize=fs)
     ax.yaxis.set_tick_params(labelsize=fs)
     ax.legend(loc=2, fontsize=fs)
@@ -246,10 +365,12 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
     plt.ion()
     plt.show()
 
+    return ax
 
-def collect_data(patients, cov_min=100):
+
+def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
     '''Collect data for the mutation rate estimate'''
-    ref = HIVreference(load_alignment=False)
+    ref = HIVreference(refname=refname, load_alignment=True, subtype=subtype)
 
     data = []
     for pi, pcode in enumerate(patients):
@@ -257,9 +378,9 @@ def collect_data(patients, cov_min=100):
 
         p = Patient.load(pcode)
         comap = (pd.DataFrame(p.map_to_external_reference('genomewide')[:, :2],
-                              columns=['HXB2', 'patient'])
+                              columns=[refname, 'patient'])
                    .set_index('patient', drop=True)
-                   .loc[:, 'HXB2'])
+                   .loc[:, refname])
 
         aft = p.get_allele_frequency_trajectories('genomewide', cov_min=cov_min)
         times = p.dsi
@@ -286,11 +407,13 @@ def collect_data(patients, cov_min=100):
                 if fead['RNA']:
                     continue
 
-                # Keep only high-entropy sites
+                # Keep only sites which are also in the reference
                 if pos not in comap.index:
                     continue
+
+                # Keep only high-entropy sites
                 S_pos = ref.entropy[comap.loc[pos]]
-                if S_pos < 0.01:
+                if S_pos < 0.1:
                     continue
 
                 # Keep only synonymous alleles
@@ -311,6 +434,8 @@ def collect_data(patients, cov_min=100):
                              'protein': fead['protein_codon'][0][0],
                              'pcode': pcode,
                              'mut': mut,
+                             'subtype': subtype,
+                             'refname': refname,
                             }
                     data.append(datum)
 
@@ -323,37 +448,54 @@ def collect_data(patients, cov_min=100):
 # Script
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser(description='Mutation rate')
+    parser.add_argument('--regenerate', action='store_true',
+                        help="regenerate data")
+    args = parser.parse_args()
+
+    fn = '../data/mutation_rate_data.pickle'
     patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
-    cov_min = 100
+    if not os.path.isfile(fn) or args.regenerate:
+        cov_min = 100
+        data = collect_data(patients, cov_min=cov_min)
+        data.to_pickle(fn)
+    else:
+        data = pd.read_pickle(fn)
 
-    data = collect_data(patients, cov_min=cov_min)
-
-    t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
+    # Make time bins
+    t_bins = np.array([0, 500, 1000, 1750, 3000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
 
     mu = get_mutation_matrix(data)
+    dmulog10 = mu.copy()
+    muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
+    for key, _ in dmulog10.iteritems():
+        dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
 
-    if True:
-        dmulog10 = mu.copy()
-        muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
-        for key, _ in dmulog10.iteritems():
-            dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
-    else:
-        dmulog10 = None
-
-    plot_mutation_rate_matrix(mu, dmulog10=dmulog10)
+    #plot_mutation_rate_matrix(mu, dmulog10=dmulog10)
 
     # Compare to Abram et al 2010
     tmp = get_mu_Abram2010(with_std=True)
     muA = tmp['mu']
     dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
-    plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
+    #plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
 
-    plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
+    #plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
+    #plot_mutation_increase(data)
 
+    def plot_single_figure(data, mu, dmulog10, muA, dmuAlog10):
+        '''Plot figure 1 of the paper'''
+        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+        axs = axs.ravel()
+        plot_mutation_increase(data, mu=mu, axs=axs[:2])
+        plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
+        plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
+
+    plot_single_figure(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
 
     # Save to file
     fn = '../data/mutation_rate.pickle'
-    a = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
+    mu_out = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
+    mu_out.to_pickle(fn)
