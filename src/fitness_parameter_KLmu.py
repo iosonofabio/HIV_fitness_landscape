@@ -245,17 +245,26 @@ if __name__=="__main__":
     plt.ioff()
     
     gen_region = 'pol' #'gag' #'pol' #'gp41' #'gp120' #'vif' #'RRE'
-    patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
+    patient_names = ['p1'] # ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
     # 'p4', 'p7' do not exist
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
 
-    q = 5 # number of quantiles
-    outdir_name = '/ebio/ag-neher/share/users/vpuller/'+\
-    'Fabio_data_work/Sampling_noise/KLonly/'
+    print 'Number of arguments:', len(sys.argv), 'arguments.'
+    print 'Argument List:', str(sys.argv)
+    
+    if len(sys.argv) > 1:
+        outdir_name = sys.argv[1]
+    else:
+        outdir_name = '/ebio/ag-neher/share/users/vpuller/'+\
+        'Fabio_data_work/Sampling_noise/KLonly/'
     if not os.path.exists(outdir_name):
         os.makedirs(outdir_name)
     
+    if len(sys.argv) > 2:
+        q = int(sys.argv[2])
+    else:
+        q = 5
 
     tt_all = []; xk_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
