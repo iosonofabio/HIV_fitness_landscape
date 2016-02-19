@@ -251,10 +251,10 @@ if __name__=="__main__":
     # p3, p8 - True mask for some time points
 
     q = 5 # number of quantiles
-    outdir_name = '/ebio/ag-neher/share/users/vpuller/'+\
-    'Fabio_data_work/Sampling_noise/KLonly/'
-    if not os.path.exists(outdir_name):
-        os.makedirs(outdir_name)
+    #outdir_name = '/ebio/ag-neher/share/users/vpuller/'+\
+    #'Fabio_data_work/Sampling_noise/KLonly/'
+    #if not os.path.exists(outdir_name):
+    #    os.makedirs(outdir_name)
     
 
     tt_all = []; xk_q_all = []
@@ -331,8 +331,8 @@ if __name__=="__main__":
     '''Saving fitness coefficients and mutation rates'''
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
-    np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
-    np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
+    #np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
+    #np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
     
     
     
@@ -345,8 +345,9 @@ if __name__=="__main__":
     plt.ylabel('xk')
     plt.legend(patient_names,loc=0)
     plt.title('quantile ' + str(jq+1))
-    plt.savefig(outdir_name + 'upper_quant_linear.pdf')
-    plt.close(10)
+    #plt.savefig(outdir_name + 'upper_quant_linear.pdf')
+    plt.ion()
+    plt.show()
     
 
     data_smu = [smuD_KLsim_q,smuD_KLmu_q]
@@ -370,7 +371,7 @@ if __name__=="__main__":
         plt.semilogy(smu[:,q+1],':o')
         plt.xticks(np.arange(len(patient_names)),patient_names)
         plt.ylabel('D, [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu.pdf')
+    #plt.savefig(outdir_name + 'smu.pdf')
     plt.close(30)
     
 
@@ -391,7 +392,7 @@ if __name__=="__main__":
     plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1]/2,fmt = '--o')
     plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
     plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
+    #plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
         
 
     plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
@@ -404,5 +405,6 @@ if __name__=="__main__":
         plt.xlabel('t'); plt.ylabel('xk')
         plt.legend(titles,loc = 0)
         plt.title(patient_names[jpat])
-    plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
+
+    #plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
     
