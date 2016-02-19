@@ -148,7 +148,7 @@ def plot_fit(data_to_fit, mu, s):
                 ls=ls,
                )
 
-    ax.set_xlabel('Time [days from infection]', fontsize=fs)
+    ax.set_xlabel('days since EDI', fontsize=fs)
     ax.set_ylabel('Average allele frequency', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
@@ -158,7 +158,7 @@ def plot_fit(data_to_fit, mu, s):
     ax.yaxis.set_tick_params(labelsize=fs)
 
     ax.text(0, 0.023,
-            r'$\mu = 1.1 \cdot 10^{-5}$ per day',
+            r'$\mu = 1.2 \cdot 10^{-5}$ per day',
             fontsize=16)
     ax.plot([200, 1300], [0.007, 0.007 + (1300 - 200) * mu], lw=1.5, c='k')
 
@@ -221,7 +221,7 @@ def plot_fit(data_to_fit, mu, s):
     plt.show()
 
 
-def fit_fitness_cost_simplest(data, plot=True, bootstrap=True):
+def fit_fitness_cost_simplest(data, plot=True, bootstrap=True, mu=None):
     '''Fit one slope and 6 saturations to ALL data at once'''
     def average_data(data):
         data = data.copy()
@@ -264,7 +264,7 @@ def fit_fitness_cost_simplest(data, plot=True, bootstrap=True):
         return mu, s
 
     data_to_fit = average_data(data)
-    mu, s = fit_data(data_to_fit)
+    mu, s = fit_data(data_to_fit, mu=mu)
 
     if bootstrap:
         def bootstrap_fun():
@@ -409,40 +409,7 @@ if __name__ == '__main__':
     np.savez(fnS, bins=S_bins, binc=S_binc, n_alleles=n_alleles)
 
     # Simplest model, dump all together no matter what the mutation rate
-    a = fit_fitness_cost_simplest(data)
-    muNS = a['mu']
+    a = fit_fitness_cost_simplest(data, mu=1.19e-5)
+    mu = a['mu']
     s = a['s']
     data_to_fit = a['data_to_fit']
-
-    sys.exit()
-
-    if False:
-        def fit_fitness_cost_for_bootstrap(data):
-            data_to_fit = prepare_data_for_fit(data, plot=False)
-            s =  fit_fitness_cost_interpmu(data_to_fit,
-                                           mu=mu,
-                                           muNS=muNS,
-                                           nu_sweep_norm=nu_sweep_norm)
-            return s['s']
-
-        ds = s['s'].copy()
-        sBS = boot_strap_patients(data, fit_fitness_cost_for_bootstrap, n_bootstrap=100)
-        for key, _ in ds.iteritems():
-            ds[key] = np.std([tmp[key] for tmp in sBS])
-        s.rename(columns={'ds': 'ds_fit'}, inplace=True)
-        s['ds_bootstrap'] = ds
-        s.sort_index(axis=1, ascending=False, inplace=True)
-
-    fn_s = 'data/fitness_cost_result.pickle'
-    s.to_pickle(fn_s)
-
-    plot_fitness_cost_allmuts(sMu)
-
-    for mut in ['A->G', 'G->A', 'C->T', 'T->C']:
-        plot_fitness_cost(data_to_fit,
-                          sMu.loc['s', mut], mu, ds=sMu.loc['ds', mut],
-                          muNS=muNS,
-                          mut=mut,
-                          nu_sweep_norm=nu_sweep_norm,
-                          #savefig='figures/fitness_cost_saturation_'+mut,
-                         )
