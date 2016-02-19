@@ -4,24 +4,34 @@ Created on Thu Feb  4 11:44:39 2016
 
 @author: vpuller
 """
-
+# Modules
 from __future__ import division
+import os
+import sys
+import argparse
 import numpy as np
 from scipy import linalg as LA
 from scipy import optimize
 import matplotlib.pyplot as plt
-import sys, os
 
 
+# FIXME: the following line is bad practice, please use your PYTHONPATH
 sys.path.append('/ebio/ag-neher/share/users/vpuller/HIVEVO/HIVEVO_access') 
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 
+
+
+# Globals
 h = 10**(-8)
 cols_Fabio = ['b','c','g','y','r','m']
 cols = ['b','g','r','c','m','y','k','b','g','r']
 
+
+
+# Functions
 def curve_smu(smu,tt):
+    # TODO: annotate
     return smu[1]/smu[0]*(1-np.exp(-smu[0]*tt))
     
 def Covariance(p_ka):
@@ -40,11 +50,12 @@ def fit_upper(xka,t_k):
     return res.x
 
 
-'''Kullback-Leibler fitting'''
+# Kullback-Leibler fitting
 def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     '''Simultaneous KL divergence minimization for several quantiles''' 
     def Kkq_gauss(s,D0):
         '''Correlation matrix'''
+        # TODO: annotate
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -55,6 +66,7 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     
     def Kkq_sqrt(s,mu,D0):
         '''Correlation matrix'''
+        # TODO: annotate
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -64,6 +76,7 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
             return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)*mu*D0/2
         
     def KL_simult(smuD):
+        # TODO: annotate
         mu = smuD[q]**2; D0 = smuD[q+1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
@@ -99,9 +112,9 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     return smuD**2
 
 
-'''Kullback-Leibler fitting for fixed mutation rate'''
-
+# Kullback-Leibler fitting for fixed mutation rate
 def akq_mat(s,dt_k):
+    # TODO: annotate
     if s > h/np.min(dt_k):
         a0 =  2*s/(1-np.exp(-2*s*dt_k))
         a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
@@ -113,8 +126,7 @@ def akq_mat(s,dt_k):
     return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
     
 def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
-    '''Simultaneous KL divergence minimization for several quantiles 
-    for a fixed mutation rate''' 
+    '''Simultaneous KL divergence minimization for quantiles for a fixed mutation rate''' 
     def Kkq_gauss(s,D0):
         '''Correlation matrix'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
@@ -126,6 +138,7 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
         
     def KL_simult(sD):
+        # TODO: annotate
         D0 = sD[-1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
@@ -159,7 +172,12 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
     return sD**2       
 
 
-def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10**(-4),return_f = False):
+def amoeba_vp(func, x0, args=(),
+              Nit=10**4,
+              a=None,
+              tol_x=10**(-4),
+              tol_f=10**(-4),
+              return_f=False):
     '''Home-made realization of multivariate Nelder-Mead minimum search
         
     Input arguments:
@@ -167,7 +185,7 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
     x0 - initial minimum guess
     args - additional arguments for the function
     Nit - maximum number of iterations
-    a - edge length of the initial simplx
+    a - edge length of the initial simplex
     tol_x, tol_f - required relative tolerances of argument and function
     return_f - return the function value and the number of iterations
     
@@ -175,13 +193,15 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
     position of the minimum
     '''
     
-    '''Nelder-Mead parameters'''
-    alpha = 1.; gamma = 2.; rho = -.5; sigma = .5
+    # Nelder-Mead parameters
+    alpha = 1.
+    gamma = 2.
+    rho = -.5
+    sigma = .5
     
     n = x0.shape[0]   
     if a is None:
         a = np.ones(n)
-#    a = 1. # edge length of the initial simplex
     xx = np.tile(x0,(n+1,1))
     xx[1:,:] += np.diag(a)
     ff = np.array([func(x,*args) for x in xx])
@@ -191,19 +211,17 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
         fmean = np.mean(ff)
         if (np.abs(xx-xcenter) < tol_x*np.abs(xcenter)).all() and (np.abs(ff-fmean) < tol_f*np.abs(fmean)).all():
             break
-        '''order'''
+        # order
         jjsort = np.argsort(ff)
         ff = ff[jjsort]
         xx = xx[jjsort,:]
-#        print j,'\n',xx,'\nf = ', ff
         
-        '''centroid point'''
+        # centroid point
         xo = np.mean(xx[:n,:],axis=0)        
         
-        '''reflection'''
+        # reflection
         xr = xo + alpha*(xo - xx[n,:])
         fr = func(xr,*args)
-#        print 'xr,fr = ', xr,fr
         if fr >= ff[0] and fr < ff[-2]:
             xx[-1,:] = xr
             ff[-1] = fr
@@ -211,7 +229,6 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
         elif fr < ff[0]:
             xe = xo + gamma*(xo - xx[n,:])
             fe = func(xe,*args)
-#            print 'xe,fe = ', xe,fe
             if fe < fr:
                 xx[-1,:] = xe
                 ff[-1] = fe
@@ -223,7 +240,6 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
         else:
             xc = xo + rho*(xo-xx[n,:])
             fc = func(xc,*args)
-#            print 'xc,fc = ', xc,fc
             if fc < ff[-1]:
                 xx[-1,:] = xc
                 ff[-1] = fc
@@ -240,22 +256,31 @@ def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10
     else:
         return xx[0,:]
         
+
+
+# Script
 if __name__=="__main__":
-    '''Studying sampling noise'''
-    plt.ioff()
-    
+
+    parser = argparse.ArgumentParser(description='Fitness cost')
+    parser.add_argument('--quantiles', type=int, default=5,
+                        help="Number of quantiles")
+    parser.add_argument('--output-folder', default=None,
+                        help='Save everything into a folder')
+    args = parser.parse_args()
+
+
     gen_region = 'pol' #'gag' #'pol' #'gp41' #'gp120' #'vif' #'RRE'
     patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
     # 'p4', 'p7' do not exist
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
 
-    q = 5 # number of quantiles
-    #outdir_name = '/ebio/ag-neher/share/users/vpuller/'+\
-    #'Fabio_data_work/Sampling_noise/KLonly/'
-    #if not os.path.exists(outdir_name):
-    #    os.makedirs(outdir_name)
-    
+    q = args.quantiles
+
+    if args.output_folder is not None:
+        outdir_name = args.output_folder
+        if not os.path.exists(outdir_name):
+            os.makedirs(outdir_name)
 
     tt_all = []; xk_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
@@ -265,7 +290,7 @@ if __name__=="__main__":
     div = False
     outliers = True
     for jpat, pat_name in enumerate(patient_names):
-        '''Load data and split it into quantiles'''
+        # Load data and split it into quantiles
         print '\n',pat_name
         PAT = Patient.load(pat_name)
         tt = PAT.times()
@@ -298,9 +323,8 @@ if __name__=="__main__":
                 x_ka = 1.- freqs[:,jjnuc0[idx_PAT],idx_PAT]
             xka_q.append(x_ka)
         
-        '''Remove outliers from the data'''
+        # Remove outliers from the data
         if outliers:
-            '''Removing outliers using a maximum frequency cutoff'''
             out = []; xka_q_new = []
             for jq, x_ka0 in enumerate(xka_q): 
                 out = np.where(x_ka0.data > .5)[1]
@@ -308,7 +332,7 @@ if __name__=="__main__":
                 xka_q_new.append(xka_q[jq][:,nonout])
             xka_q = list(xka_q_new)
 
-        '''Analyze data'''
+        # Analyze data
         xk_q = np.zeros((q,tt.shape[0]))
         Ckq_q = np.zeros((q,tt.shape[0],tt.shape[0]))
         for jq, x_ka in enumerate(xka_q): 
@@ -317,26 +341,28 @@ if __name__=="__main__":
             Ckq_q[jq,:,:] = Covariance(x_ka)
 
 
-        '''Simultaneous KL fit of fitness coefficients and mutation rates'''
+        # Simultaneous KL fit of fitness coefficients and mutation rates
         smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt) 
         
-        '''Mutation rates from linear fitting of the upper quantile'''
+        # Mutation rates from linear fitting of the upper quantile
         smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt)
         
-        '''KL fitting fitness coefficients for the given mutation rate'''
+        # KL fitting fitness coefficients for the given mutation rate
         ii_sD = range(q+2); ii_sD.remove(q)
         smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q]) 
         xk_q_all.append(xk_q)
      
-    '''Saving fitness coefficients and mutation rates'''
+    # Saving fitness coefficients and mutation rates
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
-    #np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
-    #np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
+    if outdir_name is not None:
+        np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
     
     
     
-    '''Plots'''
+    # Plots
+    # TODO: annotate each plot
     plt.figure(10,figsize=(20,6)); plt.clf()
     for jpat, tt in enumerate(tt_all):
         plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols[jpat])
@@ -345,10 +371,8 @@ if __name__=="__main__":
     plt.ylabel('xk')
     plt.legend(patient_names,loc=0)
     plt.title('quantile ' + str(jq+1))
-    #plt.savefig(outdir_name + 'upper_quant_linear.pdf')
-    plt.ion()
-    plt.show()
-    
+    if outdir_name is not None:
+        plt.savefig(outdir_name + 'upper_quant_linear.pdf') 
 
     data_smu = [smuD_KLsim_q,smuD_KLmu_q]
     titles = ['KL','KL, mu']
@@ -371,8 +395,8 @@ if __name__=="__main__":
         plt.semilogy(smu[:,q+1],':o')
         plt.xticks(np.arange(len(patient_names)),patient_names)
         plt.ylabel('D, [1/day]',fontsize=20)
-    #plt.savefig(outdir_name + 'smu.pdf')
-    plt.close(30)
+    if outdir_name is not None:
+        plt.savefig(outdir_name + 'smu.pdf')
     
 
     data_mean = np.array([smu.mean(axis=0) for smu in data_smu])
@@ -392,7 +416,8 @@ if __name__=="__main__":
     plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1]/2,fmt = '--o')
     plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
     plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
-    #plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
+    if outdir_name is not None:
+        plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
         
 
     plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
@@ -406,5 +431,8 @@ if __name__=="__main__":
         plt.legend(titles,loc = 0)
         plt.title(patient_names[jpat])
 
-    #plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
+    if outdir_name is not None:
+        plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
     
+    plt.ion()
+    plt.show()
