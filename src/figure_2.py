@@ -41,9 +41,13 @@ def load_data_KL():
     raw = np.loadtxt('data/smuD_KL.txt')
     s = raw[:, :-2]
     
-    # Geometric means, but linear is the same
-    s_mean = np.exp(np.log(s).mean(axis=0))
-    s_std = s_mean * np.log(s).std(axis=0)
+    # Bootstrap
+    n_repr = 100
+    s_BS = np.array([np.mean([s[i] for i in np.random.randint(s.shape[0], size=s.shape[0])],
+                             axis=0)
+                     for j in xrange(n_repr)])
+    s_mean = s_BS.mean(axis=0)
+    s_std = s_BS.std(axis=0)
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
@@ -54,6 +58,9 @@ def load_data_KL():
 
 def plot_fit(data_sat, data_KL):
     from matplotlib import cm
+
+    palette = sns.color_palette('Set1')
+
     fig_width = 5
     fs = 16
     fig, axs = plt.subplots(1, 2,
@@ -122,46 +129,23 @@ def plot_fit(data_sat, data_KL):
 
     ax.errorbar(x, y,
                 yerr=dy,
+                ls='-',
+                marker='o',
                 lw=2,
-                color='b',
+                color=palette[0],
                 label='Sat fit',
                )
 
-    ax.plot([1e-3, s.index[1]],
-            [s['s'].iloc[0], s['s'].iloc[1]],
-            lw=2,
-            ls='--',
-            color='b',
-           )
-    ax.errorbar([1e-3], [s['s'].iloc[0]],
-                yerr=[s['ds'].iloc[0]],
-                lw=2,
-                color='b'
-               )
-
-    # Arrow for the most conserved quantile
-    if False:
-        ax.annotate('Full conservation',
-                    xy=(1.1e-3, 0.9 * s['s'].iloc[0]),
-                    xytext=(1.1e-3, 0.01 * s['s'].iloc[0]),
-                    arrowprops={'facecolor': 'black',
-                                'width': 1.5,
-                                'headlength': 10,
-                                'shrink': 0.1,
-                               },
-                    ha='left',
-                    va='center',
-                    fontsize=fs,
-                   )
-
-
-    # Bw: KL fit
-    x = np.array(data_KL.index)
-    y = np.array(data_KL['mean'])
-    dy = np.array(data_KL['std'])
+    # B2: KL fit
+    # Ignore most conserved quantile
+    x = np.array(data_KL.index)[1:]
+    y = np.array(data_KL['mean'])[1:]
+    dy = np.array(data_KL['std'])[1:]
     ax.errorbar(x, y, yerr=dy,
+                ls='-',
+                marker='o',
                 lw=2,
-                color='darkred',
+                color=palette[1],
                 label='KL fit',
                )
 

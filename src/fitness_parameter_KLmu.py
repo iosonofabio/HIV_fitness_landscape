@@ -262,7 +262,7 @@ def amoeba_vp(func, x0, args=(),
 if __name__=="__main__":
 
     parser = argparse.ArgumentParser(description='Fitness cost')
-    parser.add_argument('--quantiles', type=int, default=5,
+    parser.add_argument('--quantiles', type=int, default=6,
                         help="Number of quantiles")
     parser.add_argument('--output-folder', default=None,
                         help='Save everything into a folder')
@@ -291,7 +291,7 @@ if __name__=="__main__":
     outliers = True
     for jpat, pat_name in enumerate(patient_names):
         # Load data and split it into quantiles
-        print '\n',pat_name
+        print pat_name
         PAT = Patient.load(pat_name)
         tt = PAT.times()
         freqs = PAT.get_allele_frequency_trajectories(gen_region)
@@ -308,7 +308,7 @@ if __name__=="__main__":
         xave = dt_k.dot(freqs[:,jjnuc0,range(jjnuc0.shape[0])])/tt[-1]
         jj2 = np.where((xave <= 1.-xcut)*(xave > xcut_up))[0]
                 
-        ref = HIVreference(load_alignment=False, subtype='any')
+        ref = HIVreference(load_alignment=False, subtype='B')
         map_to_ref = PAT.map_to_external_reference(gen_region)
         Squant = ref.get_entropy_quantiles(q)
         xka_q = []
@@ -358,6 +358,7 @@ if __name__=="__main__":
     if outdir_name is not None:
         np.savetxt(outdir_name+'smuD_KL.txt', smuD_KLsim_q, header='\t\t\t'.join(header))
         np.savetxt(outdir_name+'smuD_KLmu.txt', smuD_KLmu_q, header='\t\t\t'.join(header))
-        np.savetxt(outdir_name+'smuD_KL_quantiles.txt',
-                   np.unique(np.concatenate([Squant[i]['range'] for i in xrange(5)])))
+
+        qbord = list(Squant[0]['range']) + [Squant[i]['range'][1] for i in xrange(1, len(Squant))]
+        np.savetxt(outdir_name+'smuD_KL_quantiles.txt', qbord)
     
