@@ -308,7 +308,7 @@ if __name__=="__main__":
         xave = dt_k.dot(freqs[:,jjnuc0,range(jjnuc0.shape[0])])/tt[-1]
         jj2 = np.where((xave <= 1.-xcut)*(xave > xcut_up))[0]
                 
-        ref = HIVreference(load_alignment=False)
+        ref = HIVreference(load_alignment=False, subtype='any')
         map_to_ref = PAT.map_to_external_reference(gen_region)
         Squant = ref.get_entropy_quantiles(q)
         xka_q = []
@@ -356,83 +356,8 @@ if __name__=="__main__":
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
     if outdir_name is not None:
-        np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
-        np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name+'smuD_KL.txt', smuD_KLsim_q, header='\t\t\t'.join(header))
+        np.savetxt(outdir_name+'smuD_KLmu.txt', smuD_KLmu_q, header='\t\t\t'.join(header))
+        np.savetxt(outdir_name+'smuD_KL_quantiles.txt',
+                   np.unique(np.concatenate([Squant[i]['range'] for i in xrange(5)])))
     
-    
-    
-    # Plots
-    # TODO: annotate each plot
-    plt.figure(10,figsize=(20,6)); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols[jpat])
-        plt.plot(tt,smuD_KLmu_q[jpat,q]*tt,'-',color = cols[jpat])
-    plt.xlabel('t')
-    plt.ylabel('xk')
-    plt.legend(patient_names,loc=0)
-    plt.title('quantile ' + str(jq+1))
-    if outdir_name is not None:
-        plt.savefig(outdir_name + 'upper_quant_linear.pdf') 
-
-    data_smu = [smuD_KLsim_q,smuD_KLmu_q]
-    titles = ['KL','KL, mu']
-    ldata = len(data_smu)
-    plt.figure(30,figsize = (8*ldata,18)); plt.clf()
-    for jdata, smu in enumerate(data_smu):
-        plt.subplot(3,ldata,jdata+1)
-        plt.semilogy(range(1,q+1),smu[:,:q].T)
-        plt.xlabel('quantile',fontsize=20)
-        plt.ylabel('s [1/day]',fontsize=20)
-        plt.legend(patient_names,loc=0); plt.ylim([10**(-5),10])
-        plt.title(titles[jdata])
-        
-        plt.subplot(3,ldata,jdata+ldata+1)
-        plt.semilogy(smu[:,q],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('mu, [1/day]',fontsize=20)
-        
-        plt.subplot(3,ldata,jdata+2*ldata+1)
-        plt.semilogy(smu[:,q+1],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('D, [1/day]',fontsize=20)
-    if outdir_name is not None:
-        plt.savefig(outdir_name + 'smu.pdf')
-    
-
-    data_mean = np.array([smu.mean(axis=0) for smu in data_smu])
-    data_sigma = np.array([np.sqrt((smu**2).mean(axis=0) - smu.mean(axis=0)**2) for smu in data_smu])    
-    plt.figure(40,figsize = (30,6)); plt.clf() 
-    plt.subplot(1,3,1)
-    for jdata, smu in enumerate(data_smu):
-        plt.errorbar(range(1,q+1),np.log10(data_mean[jdata,:q]),yerr = .5*data_sigma[jdata,:q]/data_mean[jdata,:q],fmt = '--o')
-    plt.ylim((-5,0)); plt.xlim([.5,q+.5])
-    plt.xlabel('Entropy quantile',fontsize = 20); plt.ylabel('s [1/days]',fontsize = 20)
-    plt.legend(titles, loc = 0,fontsize = 20)
-    plt.subplot(1,3,2); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q],yerr = data_sigma[:,q]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('mu [1/day]',fontsize=20)
-    plt.subplot(1,3,3); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
-    if outdir_name is not None:
-        plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
-        
-
-    plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.subplot(len(tt_all),1,jpat+1)
-        for jq in xrange(q):
-            plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLsim_q[jpat,[jq,q]],tt),'-',color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLmu_q[jpat,[jq,q]],tt),'--',color = cols_Fabio[jq])
-        plt.xlabel('t'); plt.ylabel('xk')
-        plt.legend(titles,loc = 0)
-        plt.title(patient_names[jpat])
-
-    if outdir_name is not None:
-        plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
-    
-    plt.ion()
-    plt.show()

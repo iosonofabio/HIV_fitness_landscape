@@ -393,7 +393,7 @@ if __name__ == '__main__':
         data = pd.read_pickle(fn)
 
     # Make time and entropy bins
-    t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
+    t_bins = np.array([0, 100, 200, 500, 1000, 1500, 2000, 3000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
@@ -413,3 +413,12 @@ if __name__ == '__main__':
     mu = a['mu']
     s = a['s']
     data_to_fit = a['data_to_fit']
+
+    def save_plot_data(data):
+        '''Save data for plot'''
+        import cPickle as pickle
+        fn = 'data/fitness_cost_saturation_plot.pickle'
+        with open(fn, 'w') as f:
+            pickle.dump(data, f, -1)
+
+    save_plot_data(a)
