@@ -56,10 +56,18 @@ def load_data_KL():
     return data
 
 
-def plot_fit(data_sat, data_KL):
+def load_data_pooled():
+    '''Load data from the pooled allele frequencies'''
+    import cPickle as pickle
+    with open('data/combined_af_avg_selection_coeff.pkl', 'r') as f:
+        caf_s = pickle.load(f)
+    return caf_s
+
+
+def plot_fit(data_sat, data_KL, data_pooled):
     from matplotlib import cm
 
-    palette = sns.color_palette('Set1')
+    palette = sns.color_palette('colorblind')
 
     fig_width = 5
     fs = 16
@@ -133,7 +141,7 @@ def plot_fit(data_sat, data_KL):
                 marker='o',
                 lw=2,
                 color=palette[0],
-                label='Sat fit',
+                label='Sat',
                )
 
     # B2: KL fit
@@ -146,7 +154,19 @@ def plot_fit(data_sat, data_KL):
                 marker='o',
                 lw=2,
                 color=palette[1],
-                label='KL fit',
+                label='KL',
+               )
+
+    # B3: pooled
+    x = data_pooled['all'][:, 0]
+    y = data_pooled['all'][:, 1]
+    dy = data_pooled['all_std'][:, 1]
+    ax.errorbar(x, y, yerr=dy,
+                ls='-',
+                marker='o',
+                lw=2,
+                color=palette[2],
+                label='Pooled',
                )
 
     ax.legend(loc='upper right', fontsize=16)
@@ -173,7 +193,8 @@ if __name__ == '__main__':
 
     data_sat = load_data_saturation()
     data_KL = load_data_KL()
+    data_pooled = load_data_pooled()
 
-    plot_fit(data_sat, data_KL)
+    plot_fit(data_sat, data_KL, data_pooled)
 
 
