@@ -52,7 +52,7 @@ def plot_mutation_rate(mu):
             i = 2 * iy + ix
             ax.text(xc, yc, nucs[i], ha='center', va='center', fontsize=34)
 
-    def get_arrow_properties(mut):
+    def get_arrow_properties(mut, scale=1.0):
         from matplotlib import cm
         cmap = cm.jet
         wmin = 0.1
@@ -66,8 +66,8 @@ def plot_mutation_rate(mu):
             m = fun(mut)
         frac = (m - mumin) / (mumax - mumin)
         w = wmin + frac * (wmax - wmin)
-        return {'width': w,
-                'head_width': w * 2.5,
+        return {'width': scale * w,
+                'head_width': scale * w * 2.5,
                 'facecolor': cmap(1.0 * frac),
                 'edgecolor': cmap(1.0 * frac),
                }
@@ -96,8 +96,8 @@ def plot_mutation_rate(mu):
         mtxt = '$' + '{:1.1f}'.format(flo) + ' \cdot ' + '10^{'+str(decade)+'}$'
         ax.text(rc + 2.3, -rc + oft - 0.6 + dy, mut[0]+u' \u2192 '+mut[-1], fontsize=27)
         ax.text(rc + 10.2, -rc + oft - 0.6 + dy, mtxt, ha='right', fontsize=27)
-        ax.arrow(rc + 4.7, - rc + oft - 0.8 + dy, 2.4, 0, length_includes_head=True,
-                 **get_arrow_properties(mu.loc[mut]))
+        ax.arrow(rc + 4.9, - rc + oft - 0.8 + dy, 2.0, 0, length_includes_head=True,
+                 **get_arrow_properties(mu.loc[mut], scale=0.7))
 
     dy = 0
     muts = ['G->C', 'A->T', 'C->G', 'A->C', 'G->T', 'T->A',
