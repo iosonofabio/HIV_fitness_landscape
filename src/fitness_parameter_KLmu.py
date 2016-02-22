@@ -245,7 +245,7 @@ if __name__=="__main__":
     plt.ioff()
     
     gen_region = 'pol' #'gag' #'pol' #'gp41' #'gp120' #'vif' #'RRE'
-    patient_names = ['p1'] # ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
+    patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
     # 'p4', 'p7' do not exist
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
@@ -264,7 +264,7 @@ if __name__=="__main__":
     if len(sys.argv) > 2:
         q = int(sys.argv[2])
     else:
-        q = 5
+        q = 7
 
     tt_all = []; xk_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
@@ -344,74 +344,124 @@ if __name__=="__main__":
     np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
     
     
+    '''Bootstrapping'''
+    Nboot = 10**5
+    smuD_boot = np.zeros((Nboot,q+2))
+    smuD_boot_mu = np.zeros((Nboot,q+2))
+    for jboot in xrange(Nboot):
+        smuD_boot[jboot,:] = smuD_KLsim_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
+        smuD_boot_mu[jboot,:] = smuD_KLmu_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
+    
+    smuD_boot_mean = smuD_boot.mean(axis=0)
+    smuD_boot_sigma = np.sqrt((smuD_boot**2).mean(axis=0) - smuD_boot.mean(axis=0)**2)
+    smuD_boot_mu_mean = smuD_boot_mu.mean(axis=0)
+    smuD_boot_mu_sigma = np.sqrt((smuD_boot_mu**2).mean(axis=0) - smuD_boot_mu.mean(axis=0)**2)
+    
+    np.savetxt(outdir_name + 'smuD_KL_boot.txt',np.array([smuD_boot_mean, smuD_boot_sigma]),header = '\t\t\t'.join(header))
+    np.savetxt(outdir_name + 'smuD_KLmu_boot.txt',np.array([smuD_boot_mu_mean, smuD_boot_mu_sigma]),header = '\t\t\t'.join(header))
     
     '''Plots'''
-    plt.figure(10,figsize=(20,6)); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols[jpat])
-        plt.plot(tt,smuD_KLmu_q[jpat,q]*tt,'-',color = cols[jpat])
-    plt.xlabel('t')
-    plt.ylabel('xk')
-    plt.legend(patient_names,loc=0)
-    plt.title('quantile ' + str(jq+1))
-    plt.savefig(outdir_name + 'upper_quant_linear.pdf')
-    plt.close(10)
+#    plt.figure(10,figsize=(20,6)); plt.clf()
+#    for jpat, tt in enumerate(tt_all):
+#        plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols[jpat])
+#        plt.plot(tt,smuD_KLmu_q[jpat,q]*tt,'-',color = cols[jpat])
+#    plt.xlabel('t')
+#    plt.ylabel('xk')
+#    plt.legend(patient_names,loc=0)
+#    plt.title('quantile ' + str(jq+1))
+#    plt.savefig(outdir_name + 'upper_quant_linear.pdf')
+#    plt.close(10)
     
 
-    data_smu = [smuD_KLsim_q,smuD_KLmu_q]
-    titles = ['KL','KL, mu']
-    ldata = len(data_smu)
-    plt.figure(30,figsize = (8*ldata,18)); plt.clf()
-    for jdata, smu in enumerate(data_smu):
-        plt.subplot(3,ldata,jdata+1)
-        plt.semilogy(range(1,q+1),smu[:,:q].T)
-        plt.xlabel('quantile',fontsize=20)
-        plt.ylabel('s [1/day]',fontsize=20)
-        plt.legend(patient_names,loc=0); plt.ylim([10**(-5),10])
-        plt.title(titles[jdata])
-        
-        plt.subplot(3,ldata,jdata+ldata+1)
-        plt.semilogy(smu[:,q],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('mu, [1/day]',fontsize=20)
-        
-        plt.subplot(3,ldata,jdata+2*ldata+1)
-        plt.semilogy(smu[:,q+1],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('D, [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu.pdf')
-    plt.close(30)
-    
+#    data_smu = [smuD_KLsim_q,smuD_KLmu_q]
+#    titles = ['KL','KL, mu']
+#    ldata = len(data_smu)
+#    plt.figure(30,figsize = (8*ldata,18)); plt.clf()
+#    for jdata, smu in enumerate(data_smu):
+#        plt.subplot(3,ldata,jdata+1)
+#        plt.semilogy(range(1,q+1),smu[:,:q].T)
+#        plt.xlabel('quantile',fontsize=20)
+#        plt.ylabel('s [1/day]',fontsize=20)
+#        plt.legend(patient_names,loc=0); plt.ylim([10**(-5),10])
+#        plt.title(titles[jdata])
+#        
+#        plt.subplot(3,ldata,jdata+ldata+1)
+#        plt.semilogy(smu[:,q],':o')
+#        plt.xticks(np.arange(len(patient_names)),patient_names)
+#        plt.ylabel('mu, [1/day]',fontsize=20)
+#        
+#        plt.subplot(3,ldata,jdata+2*ldata+1)
+#        plt.semilogy(smu[:,q+1],':o')
+#        plt.xticks(np.arange(len(patient_names)),patient_names)
+#        plt.ylabel('D, [1/day]',fontsize=20)
+#    plt.savefig(outdir_name + 'smu.pdf')
+#    plt.close(30)
+#    
+#
+#    data_mean = np.array([smu.mean(axis=0) for smu in data_smu])
+#    data_sigma = np.array([np.sqrt((smu**2).mean(axis=0) - smu.mean(axis=0)**2) for smu in data_smu])    
+#    plt.figure(40,figsize = (30,12)); plt.clf() 
+#    plt.subplot(2,3,1)
+#    for jdata, smu in enumerate(data_smu):
+#        plt.errorbar(range(1,q+1),np.log10(data_mean[jdata,:q]),yerr = data_sigma[jdata,:q]/data_mean[jdata,:q],fmt = '--o')
+#    plt.ylim((-5,0)); plt.xlim([.5,q+.5])
+#    plt.xlabel('Entropy quantile',fontsize = 20); plt.ylabel('s [1/days]',fontsize = 20)
+#    plt.legend(titles, loc = 0,fontsize = 20)
+#    
+#    plt.subplot(2,3,2); plt.plot()
+#    plt.errorbar(range(len(data_smu)),data_mean[:,q],yerr = data_sigma[:,q],fmt = '--o')
+#    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
+#    plt.xlabel('Method',fontsize=20); plt.ylabel('mu [1/day]',fontsize=20)
+#
+#    plt.subplot(2,3,3); plt.plot()
+#    plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1],fmt = '--o')
+#    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
+#    plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
+#    
+#    
+#    plt.subplot(2,3,4)
+#    plt.errorbar(range(1,q+1),np.log10(smuD_boot_mean[:q]),yerr = smuD_boot_sigma[:q]/smuD_boot_mean[:q],fmt = '--o')
+#    plt.errorbar(range(1,q+1),np.log10(smuD_boot_mu_mean[:q]),yerr = smuD_boot_mu_sigma[:q]/smuD_boot_mu_mean[:q],fmt = '--o')
+#    plt.ylim((-5,0)); plt.xlim([.5,q+.5])
+#    plt.xlabel('Entropy quantile',fontsize = 20); plt.ylabel('s [1/days]',fontsize = 20)
+#    plt.legend(titles, loc = 0,fontsize = 20)
+#    
+#    plt.subplot(2,3,5); plt.plot()
+#    plt.errorbar(range(len(data_smu)),[smuD_boot_mean[q],smuD_boot_mu_mean[q]],\
+#    yerr = [smuD_boot_sigma[q],smuD_boot_mu_sigma[q]],fmt = '--o')
+#    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
+#    plt.xlabel('Method',fontsize=20); plt.ylabel('mu [1/day]',fontsize=20)
+#
+#    plt.subplot(2,3,6); plt.plot()
+#    plt.errorbar(range(len(data_smu)),[smuD_boot_mean[q+1],smuD_boot_mu_mean[q+1]],\
+#    yerr = [smuD_boot_sigma[q+1],smuD_boot_mu_sigma[q+1]],fmt = '--o')
+#    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
+#    plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
+#    
+#    plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
+#        
+#        
+#    xlab = ['q' + str(jq+1) for jq in xrange(q)]; xlab.extend(['mu','D'])
+#    plt.figure(50,figsize=(6*(q+2),12)); plt.clf()
+#    for jq in xrange(q+2):
+#        plt.subplot(2,q+2,jq+1)
+#        plt.hist(smuD_boot[:,jq]); plt.xlabel(xlab[jq]); plt.ylabel('KL')
+#
+#        plt.subplot(2,q+2,q+jq+3)
+#        plt.hist(smuD_boot_mu[:,jq]); plt.xlabel(xlab[jq]); plt.ylabel('KL, mu')
+#    plt.savefig(outdir_name + 'boot_hist.pdf')
+#    
+#    
 
-    data_mean = np.array([smu.mean(axis=0) for smu in data_smu])
-    data_sigma = np.array([np.sqrt((smu**2).mean(axis=0) - smu.mean(axis=0)**2) for smu in data_smu])    
-    plt.figure(40,figsize = (30,6)); plt.clf() 
-    plt.subplot(1,3,1)
-    for jdata, smu in enumerate(data_smu):
-        plt.errorbar(range(1,q+1),np.log10(data_mean[jdata,:q]),yerr = .5*data_sigma[jdata,:q]/data_mean[jdata,:q],fmt = '--o')
-    plt.ylim((-5,0)); plt.xlim([.5,q+.5])
-    plt.xlabel('Entropy quantile',fontsize = 20); plt.ylabel('s [1/days]',fontsize = 20)
-    plt.legend(titles, loc = 0,fontsize = 20)
-    plt.subplot(1,3,2); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q],yerr = data_sigma[:,q]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('mu [1/day]',fontsize=20)
-    plt.subplot(1,3,3); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
-        
-
-    plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.subplot(len(tt_all),1,jpat+1)
-        for jq in xrange(q):
-            plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLsim_q[jpat,[jq,q]],tt),'-',color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLmu_q[jpat,[jq,q]],tt),'--',color = cols_Fabio[jq])
-        plt.xlabel('t'); plt.ylabel('xk')
-        plt.legend(titles,loc = 0)
-        plt.title(patient_names[jpat])
-    plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
+#    plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
+#    for jpat, tt in enumerate(tt_all):
+#        plt.subplot(len(tt_all),1,jpat+1)
+#        for jq in xrange(q):
+#            plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols_Fabio[jq])
+#            plt.plot(tt,curve_smu(smuD_KLsim_q[jpat,[jq,q]],tt),'-',color = cols_Fabio[jq])
+#            plt.plot(tt,curve_smu(smuD_KLmu_q[jpat,[jq,q]],tt),'--',color = cols_Fabio[jq])
+#        plt.xlabel('t'); plt.ylabel('xk')
+#        plt.legend(titles,loc = 0)
+#        plt.title(patient_names[jpat])
+#    plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
     
