@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Created on Thu Feb  4 11:44:39 2016
 
@@ -16,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 # FIXME: the following line is bad practice, please use your PYTHONPATH
-sys.path.append('/ebio/ag-neher/share/users/vpuller/HIVEVO/HIVEVO_access') 
+sys.path.append('/ebio/ag-neher/share/users/vpuller/HIVEVO/HIVEVO_access')
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 
@@ -30,14 +29,11 @@ cols = ['b','g','r','c','m','y','k','b','g','r']
 
 
 # Functions
-def curve_smu(smu,tt):
-    # TODO: annotate
-    return smu[1]/smu[0]*(1-np.exp(-smu[0]*tt))
-    
 def Covariance(p_ka):
     '''Covariance matrix and correlation coefficient'''
     pmean_k = p_ka.mean(axis=1); L = p_ka.shape[1]
-    return (p_ka - np.tile(pmean_k,(L,1)).T).dot(p_ka.T - np.tile(pmean_k,(L,1)))/(L-1)    
+    return (p_ka - np.tile(pmean_k,(L,1)).T).dot(p_ka.T - np.tile(pmean_k,(L,1)))/(L-1)
+
 
 def fit_upper(xka,t_k):
     '''Fitting the quantile data with a linear law'''
@@ -52,10 +48,9 @@ def fit_upper(xka,t_k):
 
 # Kullback-Leibler fitting
 def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
-    '''Simultaneous KL divergence minimization for several quantiles''' 
+    '''Simultaneous KL divergence minimization for several quantiles'''
     def Kkq_gauss(s,D0):
-        '''Correlation matrix'''
-        # TODO: annotate
+        '''Covariance matrix for Gaussian model'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -63,10 +58,12 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
             return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
-    
+
     def Kkq_sqrt(s,mu,D0):
-        '''Correlation matrix'''
-        # TODO: annotate
+        '''Covariance matrix for square-root model
+        s - fitness parameter
+        mu-mutation rate
+        D0 - diffusion coefficient'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -74,15 +71,17 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
             return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))*mu*D0/(2*s**2)
         else:
             return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)*mu*D0/2
-        
+
     def KL_simult(smuD):
-        # TODO: annotate
+        '''Kullback-Leibler divergence for several quantiles
+        smuD - array with the square roots of the values of fitness parameters,
+        mutation rate and the diffusion coefficient'''
         mu = smuD[q]**2; D0 = smuD[q+1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
             s = smuD[jq]**2
             if gx is None:
-#                Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
+                #Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
                 Akq0 = LA.inv(Kkq_gauss(s,D0/Lq[jq]))
             elif gx == 'sqrt':
                 Akq0 = LA.inv(Kkq_sqrt(s,mu,D0/Lq[jq]))
@@ -91,13 +90,13 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
             if s > h/np.min(dt_k):
                 b_k = mu*(1-np.exp(-s*t_k))/s
             else:
-                b_k = mu*t_k 
-#            Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)
+                b_k = mu*t_k
+            #Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)
             Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)+\
             + .5*np.trace(Ckqa[jq,:,:].dot(Akq)/Lq[jq])
         if np.isnan(Like).any():
             print smuD**2, Like
-        return Like.sum()         
+        return Like.sum()
     q = pmean_ka.shape[0]
     K = t_k.shape[0]
     dt_k = np.zeros(K); dt_k[0] = t_k[0]; dt_k[1:] = np.diff(t_k)
@@ -112,21 +111,8 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     return smuD**2
 
 
-# Kullback-Leibler fitting for fixed mutation rate
-def akq_mat(s,dt_k):
-    # TODO: annotate
-    if s > h/np.min(dt_k):
-        a0 =  2*s/(1-np.exp(-2*s*dt_k))
-        a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
-        a1 = - 2*s*np.exp(-s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:])) 
-    else:
-        a0 =  1/dt_k
-        a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
-        a1 = -(1.- s*dt_k[1:])/dt_k[1:]
-    return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
-    
 def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
-    '''Simultaneous KL divergence minimization for quantiles for a fixed mutation rate''' 
+    '''Simultaneous KL divergence minimization for quantiles for a fixed mutation rate'''
     def Kkq_gauss(s,D0):
         '''Correlation matrix'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
@@ -136,14 +122,16 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
             return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
-        
+
     def KL_simult(sD):
-        # TODO: annotate
+        '''Kullback-Leibler divergence for several quantiles
+        smuD - array with the square roots of the values of fitness parameters,
+        mutation rate and the diffusion coefficient'''
         D0 = sD[-1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
             s = sD[jq]**2
-#            Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
+            #Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
             Akq0 = LA.inv(Kkq_gauss(s,D0/Lq[jq]))
             if np.isinf(Akq0).any():
                 print sD**2
@@ -153,14 +141,14 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
             if s > h/np.min(dt_k):
                 b_k = mu*(1-np.exp(-s*t_k))/s
             else:
-                b_k = mu*t_k 
-#            Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)
+                b_k = mu*t_k
+            #Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)
             Like[jq] = -.5*np.log(LA.det(Akq0)/LA.det(C)) + 0.5*(pmean_ka[jq,:]-b_k).dot(Akq).dot(pmean_ka[jq,:]-b_k)+\
             + .5*np.trace(Ckqa[jq,:,:].dot(Akq)/Lq[jq])
         if np.isnan(Like).any() or np.isinf(Like).any():
             print 'Problem in KLfit_simult_mu\n    sD = ',sD**2,'LogLikelihood = ', Like.sum()
-        return Like.sum()      
-        
+        return Like.sum()
+
     q = pmean_ka.shape[0]; K = t_k.shape[0]
     dt_k = np.zeros(K); dt_k[0] = t_k[0]; dt_k[1:] = np.diff(t_k)
     if Lq is None:
@@ -169,7 +157,7 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
         sigma = 0.
     sD0 = 10**(-3)*np.ones(q+1); step = 10**(-4)*np.ones(q+1); tol = h
     sD = amoeba_vp(KL_simult,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
-    return sD**2       
+    return sD**2
 
 
 def amoeba_vp(func, x0, args=(),
@@ -179,33 +167,33 @@ def amoeba_vp(func, x0, args=(),
               tol_f=10**(-4),
               return_f=False):
     '''Home-made realization of multivariate Nelder-Mead minimum search
-        
+
     Input arguments:
-    func - function to minimize (function fo a vecor argument of dimension no less than 2) 
+    func - function to minimize (function fo a vecor argument of dimension no less than 2)
     x0 - initial minimum guess
     args - additional arguments for the function
     Nit - maximum number of iterations
     a - edge length of the initial simplex
     tol_x, tol_f - required relative tolerances of argument and function
     return_f - return the function value and the number of iterations
-    
-    Output arguments:
+
+    Returns:
     position of the minimum
     '''
-    
+
     # Nelder-Mead parameters
     alpha = 1.
     gamma = 2.
     rho = -.5
     sigma = .5
-    
-    n = x0.shape[0]   
+
+    n = x0.shape[0]
     if a is None:
         a = np.ones(n)
     xx = np.tile(x0,(n+1,1))
     xx[1:,:] += np.diag(a)
     ff = np.array([func(x,*args) for x in xx])
-    
+
     for j in xrange(Nit):
         xcenter = np.tile(np.mean(xx,axis=0),(n+1,1))
         fmean = np.mean(ff)
@@ -215,10 +203,10 @@ def amoeba_vp(func, x0, args=(),
         jjsort = np.argsort(ff)
         ff = ff[jjsort]
         xx = xx[jjsort,:]
-        
+
         # centroid point
-        xo = np.mean(xx[:n,:],axis=0)        
-        
+        xo = np.mean(xx[:n,:],axis=0)
+
         # reflection
         xr = xo + alpha*(xo - xx[n,:])
         fr = func(xr,*args)
@@ -246,7 +234,7 @@ def amoeba_vp(func, x0, args=(),
                 continue
             else:
                 xx = xx[0,:] + sigma*(xx - xx[0,:])
-    
+
     if j == Nit -1:
         print 'WARNING from amoeba_vp:\n    the maximum number of iterations has been reached,\n    max(dx/x) = ',\
         np.max(np.abs((xx-xcenter)/xcenter)),\
@@ -255,7 +243,7 @@ def amoeba_vp(func, x0, args=(),
         return xx[0,:],ff[0], j
     else:
         return xx[0,:]
-        
+
 
 
 # Script
@@ -270,7 +258,7 @@ if __name__=="__main__":
 
 
     gen_region = 'pol' #'gag' #'pol' #'gp41' #'gp120' #'vif' #'RRE'
-    patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11'] 
+    patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11'] #['p1','p2','p5','p6','p9','p11']
     # 'p4', 'p7' do not exist
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
@@ -298,23 +286,23 @@ if __name__=="__main__":
         if np.count_nonzero(freqs.mask) > 0:
             print 'non-zero mask in ' + pat_name + ': removing ' +\
             str(np.count_nonzero(freqs.mask.sum(axis=2).sum(axis=1)>0)) +\
-            ' time points out of ' + str(tt.shape[0])  
+            ' time points out of ' + str(tt.shape[0])
             tt = tt[np.where(freqs.mask.sum(axis=2).sum(axis=1) == 0)]
             freqs = freqs[np.where(freqs.mask.sum(axis=2).sum(axis=1) == 0)[0],:,:]
-        
+
         tt_all.append(tt); L = freqs.shape[-1]
         jjnuc0 = np.argmax(freqs[0,:4,:],axis=0)
         dt_k = np.zeros(tt.shape[0]); dt_k[0] = tt[0]; dt_k[1:] = np.diff(tt)
         xave = dt_k.dot(freqs[:,jjnuc0,range(jjnuc0.shape[0])])/tt[-1]
         jj2 = np.where((xave <= 1.-xcut)*(xave > xcut_up))[0]
-                
+
         ref = HIVreference(load_alignment=False, subtype='B')
         map_to_ref = PAT.map_to_external_reference(gen_region)
         Squant = ref.get_entropy_quantiles(q)
         xka_q = []
         for jq in xrange(q):
             idx_ref = Squant[jq]['ind']
-            idx_PAT = np.array([map_to_ref[i,2] for i,jref in enumerate(map_to_ref[:,0]) 
+            idx_PAT = np.array([map_to_ref[i,2] for i,jref in enumerate(map_to_ref[:,0])
             if jref in idx_ref and map_to_ref[i,2] in jj2])
 
             if div:
@@ -322,11 +310,11 @@ if __name__=="__main__":
             else:
                 x_ka = 1.- freqs[:,jjnuc0[idx_PAT],idx_PAT]
             xka_q.append(x_ka)
-        
+
         # Remove outliers from the data
         if outliers:
             out = []; xka_q_new = []
-            for jq, x_ka0 in enumerate(xka_q): 
+            for jq, x_ka0 in enumerate(xka_q):
                 out = np.where(x_ka0.data > .5)[1]
                 nonout0 = range(x_ka0.shape[1]); nonout = [j for j in nonout0 if j not in out]
                 xka_q_new.append(xka_q[jq][:,nonout])
@@ -335,23 +323,23 @@ if __name__=="__main__":
         # Analyze data
         xk_q = np.zeros((q,tt.shape[0]))
         Ckq_q = np.zeros((q,tt.shape[0],tt.shape[0]))
-        for jq, x_ka in enumerate(xka_q): 
+        for jq, x_ka in enumerate(xka_q):
             Lq[jpat,jq] = x_ka.shape[1]
             xk_q[jq,:] = x_ka.mean(axis=1)
             Ckq_q[jq,:,:] = Covariance(x_ka)
 
 
         # Simultaneous KL fit of fitness coefficients and mutation rates
-        smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt) 
-        
+        smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt)
+
         # Mutation rates from linear fitting of the upper quantile
-        smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt)
-        
+        smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt) #  FIXME we may want to use different mutation rates here
+
         # KL fitting fitness coefficients for the given mutation rate
         ii_sD = range(q+2); ii_sD.remove(q)
-        smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q]) 
+        smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q])
         xk_q_all.append(xk_q)
-     
+
     # Saving fitness coefficients and mutation rates
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
@@ -361,4 +349,20 @@ if __name__=="__main__":
 
         qbord = list(Squant[0]['range']) + [Squant[i]['range'][1] for i in xrange(1, len(Squant))]
         np.savetxt(outdir_name+'smuD_KL_quantiles.txt', qbord)
-    
+
+    '''Bootstrapping'''
+    Nboot = 10**5
+    smuD_boot = np.zeros((Nboot,q+2))
+    smuD_boot_mu = np.zeros((Nboot,q+2))
+    for jboot in xrange(Nboot):
+        smuD_boot[jboot,:] = smuD_KLsim_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
+        smuD_boot_mu[jboot,:] = smuD_KLmu_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
+
+    smuD_boot_mean = smuD_boot.mean(axis=0)
+    smuD_boot_sigma = np.sqrt((smuD_boot**2).mean(axis=0) - smuD_boot.mean(axis=0)**2)
+    smuD_boot_mu_mean = smuD_boot_mu.mean(axis=0)
+    smuD_boot_mu_sigma = np.sqrt((smuD_boot_mu**2).mean(axis=0) - smuD_boot_mu.mean(axis=0)**2)
+
+    if outdir_name is not None:
+        np.savetxt(outdir_name + 'smuD_KL_boot.txt',np.array([smuD_boot_mean, smuD_boot_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_boot.txt',np.array([smuD_boot_mu_mean, smuD_boot_mu_sigma]),header = '\t\t\t'.join(header))
