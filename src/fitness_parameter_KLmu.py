@@ -358,7 +358,7 @@ if __name__=="__main__":
         smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt) 
         
         # Mutation rates from linear fitting of the upper quantile
-        smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt)
+        smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt) #  FIXME we may want to use different mutation rates here 
         
         # KL fitting fitness coefficients for the given mutation rate
         ii_sD = range(q+2); ii_sD.remove(q)
