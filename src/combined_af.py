@@ -126,6 +126,9 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
         combined_af[region] = af_average(data['af_by_pat'][region].values())
         combined_entropy[region] = (-np.log2(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
         minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
+        #ind = combined_af[region][:nstates,:].sum(axis=0)<0.5
+        #minor_af[region][ind]=np.nan
+        #combined_entropy[region][ind]=np.nan
         if nbootstraps:
             minor_af_bs[region]=[]
             combined_entropy_bs[region]=[]
@@ -134,6 +137,9 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
                     tmp_af = af_average(patient_bootstrap(data['af_by_pat'][region]))
                     combined_entropy_bs[region].append((-np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0))
                     minor_af_bs[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
+                    #ind = tmp_af[:nstates,:].sum(axis=0)<0.5
+                    #minor_af_bs[region][-1][ind]=np.nan
+                    #combined_entropy_bs[region][-1][ind]=np.nan
             elif bootstrap_type=='partition':
                 for ii in xrange(nbootstraps//2):
                     for a in patient_partition(data['af_by_pat'][region]):
@@ -190,11 +196,14 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
-def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None):
+def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None, ref=None):
     '''
     produce figure of distribution of selection coefficients separately for
     synonymous and nonsynonymous sites.
     '''
+    if ref is not None:
+        if not hasattr(ref, 'fitness_cost'):
+            ref.fitness_cost = np.zeros_like(ref.entropy)
     fig, axs = plt.subplots(1,2,sharey=True)
     #plt.title(region+' selection coefficients')
     if type(regions)==str:
@@ -207,6 +216,10 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None):
         s = np.array(slist)
         s[s>=0.1] = 0.1
         s[s<=0.001] = 0.001
+        if ref is not None:
+            bg = ref.annotation[region].location.start
+            ed = ref.annotation[region].location.end
+            ref.fitness_cost[bg:ed][ind] = s
         ax.hist(s, color=cols[ni],
                  weights=np.ones(len(s), dtype=float)/len(s), bins=np.logspace(-3,-1,11), label=label_str+', n='+str(len(s)))
         ax.set_xscale('log')
@@ -294,10 +307,13 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference, fnam
         entropy_thresholds =  np.array(np.linspace(0,A.shape[0],8), int)
         if smoothing=='harmonic':
             avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), 1.0/np.mean(1.0/A[li:ui,1], axis=0)) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
+            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), 1.0/np.std(1.0/A[li:ui,1], axis=0)/np.sqrt(ui-li)) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
         elif smoothing=='median':
             avg_sel_coeff[label_str] = np.array([np.median(A[li:ui,:], axis=0) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
+            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.std(A[li:ui,1], axis=0)/np.sqrt(ui-li)) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
         elif smoothing=='geometric':
             avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), np.exp(np.mean(np.log(A[li:ui,1]), axis=0))) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
+            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.exp(np.std(np.log(A[li:ui,1], axis=0))/np.sqrt(ui-li))) for li,ui in zip(entropy_thresholds[:-1], entropy_thresholds[1:])])
 
         ax.plot(avg_sel_coeff[label_str][:,0], avg_sel_coeff[label_str][:,1], lw=3)
 
@@ -320,7 +336,7 @@ if __name__=="__main__":
                         help="regenerate data")
     args = parser.parse_args()
 
-    reference = HIVreference(refname='HXB2', subtype = 'any')
+    reference = HIVreference(refname='HXB2', subtype = 'B')
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
@@ -350,7 +366,7 @@ if __name__=="__main__":
 
         fraction_diverse(region, minor_af, synnonsyn, 'figures/'+region+'_minor_allele_frequency.pdf')
 
-        selcoeff_distribution(region, minor_af, synnonsyn,data['mut_rate'], 'figures/'+region+'_sel_coeff.png')
+        selcoeff_distribution(region, minor_af, synnonsyn, data['mut_rate'], 'figures/'+region+'_sel_coeff.png', ref=reference)
 
         selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
 
@@ -360,5 +376,5 @@ if __name__=="__main__":
     avg_sel_coeff = selcoeff_vs_entropy(regions,  minor_af, synnonsyn,data['mut_rate'], reference,
             fname='figures/'+region+'_sel_coeff_scatter.png', smoothing='harmonic')
 
-    with open('data/avg_selection_coeff.pkl', 'w') as ofile:
+    with open('data/combined_af_avg_selection_coeff.pkl', 'w') as ofile:
         cPickle.dump(avg_sel_coeff, ofile)
