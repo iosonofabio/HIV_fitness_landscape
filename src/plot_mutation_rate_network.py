@@ -32,9 +32,9 @@ def load_mutation_rate():
 
 def plot_mutation_rate(mu):
     '''Plot accumulation of mutations and fits'''
-    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
-    lim = 7
-    ax.set_xlim(-lim, lim * 2 + 4)
+    fig, ax = plt.subplots(1, 1, figsize=(13, 8))
+    lim = 6.7
+    ax.set_xlim(-lim, lim * 2 + 3)
     ax.set_ylim(lim, -lim)
     ax.axis('off')
 
@@ -52,7 +52,7 @@ def plot_mutation_rate(mu):
             i = 2 * iy + ix
             ax.text(xc, yc, nucs[i], ha='center', va='center', fontsize=34)
 
-    def get_arrow_properties(mut):
+    def get_arrow_properties(mut, scale=1.0):
         from matplotlib import cm
         cmap = cm.jet
         wmin = 0.1
@@ -66,13 +66,13 @@ def plot_mutation_rate(mu):
             m = fun(mut)
         frac = (m - mumin) / (mumax - mumin)
         w = wmin + frac * (wmax - wmin)
-        return {'width': w,
-                'head_width': w * 2.5,
+        return {'width': scale * w,
+                'head_width': scale * w * 2.5,
                 'facecolor': cmap(1.0 * frac),
                 'edgecolor': cmap(1.0 * frac),
                }
 
-    gap = 0.7
+    gap = 0.5
     ax.arrow(-(rc + gap), -(rc - r - 0.2), 0, 2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('A->G'))
     ax.arrow(-(rc - gap), (rc - r - 0.2), 0, -2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('G->A'))
     ax.arrow(+(rc - gap), -(rc - r - 0.2), 0, 2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('C->T'))
@@ -88,25 +88,41 @@ def plot_mutation_rate(mu):
 
 
     oft = 0.8
-    ax.text(rc + 3, - rc + oft - 1.5, 'Mutation rate [$day^{-1}$]:', fontsize=33)
+    ax.text(rc + 2.4, - rc + oft - 1.7, 'Rates [per site per day]:', fontsize=28)
 
-    ax.arrow(rc + 3, - rc + oft, rc, 0, length_includes_head=True, **get_arrow_properties(1e-7))
-    ax.text(rc + 3 + rc + 3.5, - rc + oft, r'$10^{-7}$', ha='right', va='center', fontsize=34)
+    def write_mut(mut, dy):
+        decade = int(np.floor(np.log10(mu.loc[mut])))
+        flo = mu.loc[mut] * 10**(-decade)
+        mtxt = '$' + '{:1.1f}'.format(flo) + ' \cdot ' + '10^{'+str(decade)+'}$'
+        ax.text(rc + 2.3, -rc + oft - 0.6 + dy, mut[0]+u' \u2192 '+mut[-1], fontsize=27)
+        ax.text(rc + 10.2, -rc + oft - 0.6 + dy, mtxt, ha='right', fontsize=27)
+        ax.arrow(rc + 4.9, - rc + oft - 0.8 + dy, 2.0, 0, length_includes_head=True,
+                 **get_arrow_properties(mu.loc[mut], scale=0.7))
 
-    ax.arrow(rc + 3, - rc + oft + 2, rc, 0, length_includes_head=True, **get_arrow_properties(3e-7))
-    ax.text(rc + 3 + rc + 3.5, -rc + oft + 2, r'$3 \cdot 10^{-7}$', ha='right', va='center', fontsize=34)
+    dy = 0
+    muts = ['G->C', 'A->T', 'C->G', 'A->C', 'G->T', 'T->A',
+            'T->G', 'C->A', 'A->G', 'T->C', 'C->T', 'G->A']
+    for mut in muts:
+        write_mut(mut, dy)
+        dy += 1
 
-    ax.arrow(rc + 3, - rc + oft + 4, rc, 0, length_includes_head=True, **get_arrow_properties(1e-6))
-    ax.text(rc + 3 + rc + 3.5, -rc + oft + 4, r'$10^{-6}$', ha='right', va='center', fontsize=34)
+    #ax.arrow(rc + 3, - rc + oft, rc, 0, length_includes_head=True, **get_arrow_properties(1e-7))
+    #ax.text(rc + 3 + rc + 3.5, - rc + oft, r'$10^{-7}$', ha='right', va='center', fontsize=34)
 
-    ax.arrow(rc + 3, - rc + oft + 6, rc, 0, length_includes_head=True, **get_arrow_properties(3e-6))
-    ax.text(rc + 3 + rc + 3.5, -rc + oft + 6, r'$3 \cdot 10^{-6}$', ha='right', va='center', fontsize=34)
+    #ax.arrow(rc + 3, - rc + oft + 2, rc, 0, length_includes_head=True, **get_arrow_properties(3e-7))
+    #ax.text(rc + 3 + rc + 3.5, -rc + oft + 2, r'$3 \cdot 10^{-7}$', ha='right', va='center', fontsize=34)
 
-    ax.arrow(rc + 3, - rc + oft + 8, rc, 0, length_includes_head=True, **get_arrow_properties(1e-5))
-    ax.text(rc + 3 + rc + 3.5, -rc + oft + 8, r'$10^{-5}$', ha='right', va='center', fontsize=34)
+    #ax.arrow(rc + 3, - rc + oft + 4, rc, 0, length_includes_head=True, **get_arrow_properties(1e-6))
+    #ax.text(rc + 3 + rc + 3.5, -rc + oft + 4, r'$10^{-6}$', ha='right', va='center', fontsize=34)
 
-    ax.arrow(rc + 3, - rc + oft + 10, rc, 0, length_includes_head=True, **get_arrow_properties(2e-5))
-    ax.text(rc + 3 + rc + 3.5, -rc + oft + 10, r'$2 \cdot 10^{-5}$', ha='right', va='center', fontsize=34)
+    #ax.arrow(rc + 3, - rc + oft + 6, rc, 0, length_includes_head=True, **get_arrow_properties(3e-6))
+    #ax.text(rc + 3 + rc + 3.5, -rc + oft + 6, r'$3 \cdot 10^{-6}$', ha='right', va='center', fontsize=34)
+
+    #ax.arrow(rc + 3, - rc + oft + 8, rc, 0, length_includes_head=True, **get_arrow_properties(1e-5))
+    #ax.text(rc + 3 + rc + 3.5, -rc + oft + 8, r'$10^{-5}$', ha='right', va='center', fontsize=34)
+
+    #ax.arrow(rc + 3, - rc + oft + 10, rc, 0, length_includes_head=True, **get_arrow_properties(2e-5))
+    #ax.text(rc + 3 + rc + 3.5, -rc + oft + 10, r'$2 \cdot 10^{-5}$', ha='right', va='center', fontsize=34)
 
     plt.tight_layout()
 
