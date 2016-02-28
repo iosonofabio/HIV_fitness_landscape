@@ -20,6 +20,41 @@ ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette()
 plt.ion()
 
+def draw_genome(ax, annotations,rows=3, readingframe=True,fs=9):
+    from matplotlib.patches import Rectangle
+    y1 ,height, pad = 0, 1, 0.2
+    ax.set_ylim([-pad,rows*(height+pad)])
+    anno_elements = []
+    for name, feature in annotations.iteritems():
+        x = [feature.location.nofuzzy_start, feature.location.nofuzzy_end]
+        anno_elements.append({'name': name,
+                     'x1': x[0], 'x2': x[1], 'width': x[1] - x[0]})
+    anno_elements.sort(key = lambda x:x['x1'])
+    for ai, anno in enumerate(anno_elements):
+        if readingframe:
+            anno['y1'] = y1 + (height + pad) * (2 - (anno['x1'])%3)
+        else:
+            anno['y1'] = y1 + (height + pad) * (ai%rows)
+        anno['y2'] = anno['y1'] + height
+
+    for anno in anno_elements:
+        r = Rectangle((anno['x1'], anno['y1']),
+                      anno['width'],
+                      height,
+                      facecolor=[0.8] * 3,
+                      edgecolor='k',
+                      label=anno['name'])
+
+        xt = anno['x1'] + 0.5 * anno['width']
+        yt = anno['y1'] + 0.2 * height + height*(anno['width']<500)
+
+        ax.add_patch(r)
+        ax.text(xt, yt,
+                anno['name'],
+                color='k',
+                fontsize=fs,
+                ha='center')
+
 
 def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
     from Bio.Seq import CodonTable
@@ -65,7 +100,7 @@ drug_muts = {'PI':{'offset': 56 - 1,
                         ('G', 48, 'VM'), ('I', 50, 'LV'), ('I', 54, 'VTAM'), ('L', 76, 'V'),
                         ('V', 82, 'ATSF'), ('I', 84, 'V'), ('N', 88, 'S'), ('L', 90, 'M')]},
              'NRTI':{'offset':56 + 99 - 1,
-                    'mutations': [('M', 41, 'L'),('K', 65, 'R'),('K', 70, 'ER'),('L', 74, 'VI'),
+                    'mutations': [('M', 41, 'L'),('K', 65, 'R'),('D', 67, 'N'),('K', 70, 'ER'),('L', 74, 'VI'),
                                 ('Y', 115, 'F'),  ('M', 184,'VI'), ('L', 210,'W'), ('T', 215,'YF'), ('K', 219,'QE')]
                    },
              'NNRTI':{'offset':56 + 99 - 1,
@@ -106,7 +141,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
     for pi, p in enumerate(patients):
         pcode = p.name
         combined_af_by_pat[pcode] = np.zeros(reference.af.shape)
-        aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=2e-3)
+        aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=1e-3)
 
         # get patient to subtype map and initial aa and nuc sequence
         patient_to_subtype = p.map_to_external_reference_aminoacids(region, refname = reference.refname)
@@ -325,6 +360,85 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
     plt.hist(selcoeff, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
     plt.xscale('log')
 
+def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
+    plt.figure()
+    selcoeff = {}
+    for ri,region in enumerate(regions):
+        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc[sc<0.001]=0.001
+        sc[sc>0.1]=0.1
+        selcoeff[region] = sc
+        n=len(sc)
+        y,x = np.histogram(sc, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region, c=cols[ri], lw=3)
+
+    plt.legend(loc=2)
+    plt.xscale('log')
+    from scipy.stats import ks_2samp
+    for r1 in regions:
+        for r2 in regions:
+            print(r1,r2, ks_2samp(selcoeff[r1], selcoeff[r2]))
+
+    return selcoeff
+
+def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_nonsyn_mutation_rates, plot=False):
+    if plot: plt.figure()
+    selcoeff = {}
+    for ri,region in enumerate(regions):
+        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc[sc<0.001]=0.001
+        sc[sc>0.1]=0.1
+        valid = data['pheno'][region][pheno]>0
+        above = valid&(data['pheno'][region][pheno]>threshold)
+        below = valid&(data['pheno'][region][pheno]<=threshold)
+        print(above.sum(), below.sum())
+        selcoeff[region] = (sc[above], sc[below])
+        if plot:
+            n=len(selcoeff[region][0])
+            y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+            plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' above', ls='--', c=cols[ri], lw=3)
+            n=len(selcoeff[region][1])
+            y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+            plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' below', c=cols[ri], lw=3)
+
+    if plot:
+        plt.legend(loc=2)
+        plt.xscale('log')
+    from scipy.stats import ks_2samp
+    KS = {}
+    for r1 in regions:
+        KS[r1] = ks_2samp(selcoeff[r1][0], selcoeff[r1][1])
+        print(r1, KS[r1])
+    return KS
+
+def selection_coefficients_compare_association(association, associations, regions, data, total_nonsyn_mutation_rates):
+    plt.figure()
+    selcoeff = {}
+    for ri,region in enumerate(regions):
+        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc[sc<0.001]=0.001
+        sc[sc>0.1]=0.1
+        above = associations[region][association]
+        below = ~associations[region][association]
+        print(above.sum(), below.sum())
+        selcoeff[region] = (sc[above], sc[below])
+        n=len(selcoeff[region][0])
+        y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' associated', ls='--', c=cols[ri], lw=3)
+        n=len(selcoeff[region][1])
+        y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' non associated', c=cols[ri], lw=3)
+
+    plt.legend(loc=2)
+    plt.xscale('log')
+    from scipy.stats import ks_2samp
+    KS = {}
+    for r1 in regions:
+        KS[r1] = ks_2samp(selcoeff[r1][0], selcoeff[r1][1])
+        print(r1, KS[r1])
+    return KS
+
+
 
 def compare_experiments(data, aa_mutation_rates):
     fc = pd.read_csv('data/fitness_costs.csv')
@@ -456,6 +570,25 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates):
             for pos in xrange(selcoeff[25].shape[0]):
                 selfile.write('\t'.join(map(str,[pos+1]+[sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
+def plot_drug_resistance_mutations(pcode):
+    plt.figure()
+    p = Patient.load(pcode)
+    RT = p.get_allele_frequency_trajectories('RT', type='aa')
+    for mt in ['NNRTI', 'NRTI']:
+        for aa1, pos, aa2 in drug_muts[mt]['mutations']:
+            traj =1-RT[:,alphaal.index(aa1), pos-1]
+            if max(traj)>0.1:
+                plt.plot(p.dsi, traj,'-o', label=mt+ ' '+str(pos))
+
+    PR = p.get_allele_frequency_trajectories('PR', type='aa')
+    for mt in ['PI']:
+        for aa1, pos, aa2 in drug_muts[mt]['mutations']:
+            traj =1-PR[:,alphaal.index(aa1), pos-1]
+            if max(traj)>0.1:
+                plt.plot(p.dsi, traj,'-o', label=mt+ ' '+str(pos))
+
+    plt.legend(loc=2, ncol=2)
+
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='amino acid allele frequencies, saturation levels, and fitness costs')
@@ -465,7 +598,7 @@ if __name__=="__main__":
 
     fn = 'data/avg_aa_allele_frequency.pickle.gz'
 
-    regions = ['gag', 'pol', 'nef']
+    regions = ['gag', 'pol', 'nef', 'env', 'vif']
     if not os.path.isfile(fn) or args.regenerate:
         #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
@@ -484,6 +617,7 @@ if __name__=="__main__":
 
 
     aa_ref='NL4-3'
+    global_ref = HIVreference(refname=aa_ref)
 
     for region in regions:
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
@@ -500,4 +634,35 @@ if __name__=="__main__":
 
 plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
 
+sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
+
+
+pval = []
+#for thres in np.arange(1,200,5):
+pheno='structural'
+for thres in np.linspace(0,3,21):
+    KS = selection_coefficients_compare_pheno(pheno, thres, regions, data, total_nonsyn_mutation_rates, plot=False)
+    pval.append((thres, np.log(KS['pol'].pvalue)))
+
+pval = np.array(pval)
+plt.plot(pval[:,0], pval[:,1])
+
+KS_disorder = selection_coefficients_compare_pheno('disorder', 0.75, regions, data, total_nonsyn_mutation_rates, plot =True)
+
+KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions, data, total_nonsyn_mutation_rates, plot=True)
+
+KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions, data, total_nonsyn_mutation_rates, plot =True)
+
+KS_HLA = selection_coefficients_compare_association('HLA', associations, regions, data, total_nonsyn_mutation_rates)
+
+
+
+fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
+
+ws=50
+for ri, region in enumerate(regions):
+    #axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
+    axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], np.convolve(np.ones(ws, dtype=float)/ws, sc[region], mode='same'), c=cols[ri], ls='-')
+
+draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
