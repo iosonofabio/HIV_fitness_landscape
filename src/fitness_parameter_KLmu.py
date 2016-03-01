@@ -300,7 +300,7 @@ if __name__=="__main__":
     xcut = 0.0; xcut_up = 0.
     div = False
     outliers = True
-    gx = None
+    gx = None #'sqrt'
     for jpat, pat_name in enumerate(patient_names):
         # Load data and split it into quantiles
         print pat_name
