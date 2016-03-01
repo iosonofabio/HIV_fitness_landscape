@@ -7,7 +7,6 @@ content:    Combine allele frequencies from all patients for strongly conserved 
 # Modules
 from __future__ import division, print_function
 import sys, argparse, cPickle, os, gzip
-sys.path.append('/ebio/ag-neher/share/users/rneher/HIVEVO_access/')
 import numpy as np
 from itertools import izip
 from hivevo.patients import Patient
@@ -20,7 +19,6 @@ from scipy.stats import spearmanr, scoreatpercentile, pearsonr
 from random import sample
 
 
-
 # Globals
 sns.set_style('darkgrid')
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
@@ -28,7 +26,62 @@ cols = sns.color_palette()
 fs=16
 plt.ion()
 
+def running_average(obs, ws):
+    '''
+    calculates a running average
+    obs     --  observations
+    ws      --  window size (number of points to average)
+    '''
+    try:
+        tmp_vals = np.convolve(np.ones(ws, dtype=float)/ws, obs, mode='same')
+        # fix the edges. using mode='same' assumes zeros outside the range
+        if ws%2==0:
+            tmp_vals[:ws//2]*=float(ws)/np.arange(ws//2,ws)
+            if ws//2>1:
+                tmp_vals[-ws//2+1:]*=float(ws)/np.arange(ws-1,ws//2,-1.0)
+        else:
+            tmp_vals[:ws//2]*=float(ws)/np.arange(ws//2+1,ws)
+            tmp_vals[-ws//2:]*=float(ws)/np.arange(ws,ws//2,-1.0)
+    except:
+        import ipdb; ipdb.set_trace()
+        tmp_vals = 0.5*np.ones_like(obs, dtype=float)
+    return tmp_vals
 
+
+def draw_genome(ax, annotations,rows=3, readingframe=True,fs=9):
+    from matplotlib.patches import Rectangle
+    y1 ,height, pad = 0, 1, 0.2
+    ax.set_ylim([-pad,rows*(height+pad)])
+    anno_elements = []
+    for name, feature in annotations.iteritems():
+        x = [feature.location.nofuzzy_start, feature.location.nofuzzy_end]
+        anno_elements.append({'name': name,
+                     'x1': x[0], 'x2': x[1], 'width': x[1] - x[0]})
+    anno_elements.sort(key = lambda x:x['x1'])
+    for ai, anno in enumerate(anno_elements):
+        if readingframe:
+            anno['y1'] = y1 + (height + pad) * (2 - (anno['x1'])%3)
+        else:
+            anno['y1'] = y1 + (height + pad) * (ai%rows)
+        anno['y2'] = anno['y1'] + height
+
+    for anno in anno_elements:
+        r = Rectangle((anno['x1'], anno['y1']),
+                      anno['width'],
+                      height,
+                      facecolor=[0.8] * 3,
+                      edgecolor='k',
+                      label=anno['name'])
+
+        xt = anno['x1'] + 0.5 * anno['width']
+        yt = anno['y1'] + 0.2 * height + height*(anno['width']<500)
+
+        ax.add_patch(r)
+        ax.text(xt, yt,
+                anno['name'],
+                color='k',
+                fontsize=fs,
+                ha='center')
 
 # Functions
 def patient_bootstrap(afs):
@@ -70,32 +123,36 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
     syn_nonsyn_by_pat={}
     for pi, p in enumerate(patients):
         pcode= p.name
-        combined_af_by_pat[pcode] = np.zeros((6, len(reference.annotation[region])))
-        print(pcode, p.Subtype)
-        aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, error_rate = 2e-3, type='nuc')
+        print("averaging ",pcode," region ",region)
+        try:
+            pcode= p.name
+            combined_af_by_pat[pcode] = np.zeros((6, len(reference.annotation[region])))
+            print(pcode, p.Subtype)
+            aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, error_rate = 2e-3, type='nuc')
 
-        # get patient to subtype map
-        patient_to_subtype = p.map_to_external_reference(region, refname = reference.refname)
-        consensus = reference.get_consensus_indices_in_patient_region(patient_to_subtype)
-        ref_ungapped = good_pos_in_reference[patient_to_subtype[:,0]]
+            # get patient to subtype map
+            patient_to_subtype = p.map_to_external_reference(region, refname = reference.refname)
+            consensus = reference.get_consensus_indices_in_patient_region(patient_to_subtype)
+            ref_ungapped = good_pos_in_reference[patient_to_subtype[:,0]]
 
-        ancestral = p.get_initial_indices(region)[patient_to_subtype[:,2]]
-        rare = ((aft[:,:4,:]**2).sum(axis=1).min(axis=0)>max_div)[patient_to_subtype[:,2]]
-        final = aft[-1].argmax(axis=0)[patient_to_subtype[:,2]]
+            ancestral = p.get_initial_indices(region)[patient_to_subtype[:,2]]
+            rare = ((aft[:,:4,:]**2).sum(axis=1).min(axis=0)>max_div)[patient_to_subtype[:,2]]
+            final = aft[-1].argmax(axis=0)[patient_to_subtype[:,2]]
 
-        syn_nonsyn_by_pat[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
-        syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
-            (p.get_syn_mutations(region).sum(axis=0)>1)[patient_to_subtype[:,2]]
-        for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
-            if ysi<1:
-                continue
-            pat_af = af[:,patient_to_subtype[:,2]]
-            patient_consensus = pat_af.argmax(axis=0)
-            ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
-            w = depth/(1.0+depth/300.0)
-            combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-patient_to_subtype[0][0]] \
-                        += w*pat_af[:,ind]
-
+            syn_nonsyn_by_pat[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
+            syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
+                (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
+            for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
+                if ysi<1:
+                    continue
+                pat_af = af[:,patient_to_subtype[:,2]]
+                patient_consensus = pat_af.argmax(axis=0)
+                ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
+                w = depth/(1.0+depth/300.0)
+                combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-patient_to_subtype[0][0]] \
+                            += w*pat_af[:,ind]
+        except:
+            import ipdb; ipdb.set_trace()
     return combined_af_by_pat, syn_nonsyn_by_pat
 
 
@@ -357,6 +414,23 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference, fnam
 
     return avg_sel_coeff
 
+def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference):
+    fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
+
+    ws=30
+    for ni,label_str in ((0,'synonymous'), (1,'nonsynonymous')):
+        for ri, region in enumerate(regions):
+            ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
+            #axs[0].plot([x for x in reference.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
+            sc = (data['mut_rate'][region]/(0.0001+minor_af[region]))
+            axs[0].plot(running_average(np.array(list(reference.annotation[region]))[ind], ws),
+                        np.exp(running_average(np.log(sc[ind]), ws)),
+                        c=cols[ri], ls='--' if label_str=='synonymous' else '-')
+
+    axs[0].set_yscale('log')
+    draw_genome(axs[1], {k:val for k,val in reference.annotation.iteritems() if k in
+        ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp120', 'gp41', 'vif', 'V1', 'V2', 'V3', 'V5', 'RRE']})
+
 
 
 # Script
@@ -369,11 +443,14 @@ if __name__=="__main__":
                         help='subtype to compare against')
     args = parser.parse_args()
 
-    reference = HIVreference(refname='NL4-3', subtype=args.subtype)
+    # note that HXB2 alignment has way more sequences resulting in better correlations
+    reference = HIVreference(refname='HXB2', subtype=args.subtype)
+    #from Bio.SeqFeature import SeqFeature, FeatureLocation
+    #reference.annotation['gp41'] = SeqFeature(location=FeatureLocation(reference.annotation['gp41'].location.start, reference.annotation['gp41'].location.end+3))
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
-    regions = ['gag', 'pol', 'nef']
+    regions = ['gag', 'pol', 'nef', 'vif', 'env']
     if not os.path.isfile(fn) or args.regenerate:
         #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
@@ -409,3 +486,5 @@ if __name__=="__main__":
 
     with open('data/combined_af_avg_selection_coeff.pkl', 'w') as ofile:
         cPickle.dump(avg_sel_coeff, ofile)
+
+    plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference)
