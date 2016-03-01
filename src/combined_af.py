@@ -121,6 +121,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
     good_pos_in_reference = reference.get_ungapped(threshold = 0.05)
     combined_af_by_pat = {}
     syn_nonsyn_by_pat={}
+    region_start = int(reference.annotation[region].location.start)
     for pi, p in enumerate(patients):
         pcode= p.name
         print("averaging ",pcode," region ",region)
@@ -149,7 +150,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
                 patient_consensus = pat_af.argmax(axis=0)
                 ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
                 w = depth/(1.0+depth/300.0)
-                combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-patient_to_subtype[0][0]] \
+                combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-region_start] \
                             += w*pat_af[:,ind]
         except:
             import ipdb; ipdb.set_trace()
@@ -200,7 +201,7 @@ def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap
     for region in regions:
         combined_af[region] = af_average(data['af_by_pat'][region].values())
         combined_entropy[region] = (-np.log2(combined_af[region]+1e-10)*combined_af[region]).sum(axis=0)
-        minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
+        minor_af[region] = (combined_af[region][:nstates,:].sum(axis=0) - combined_af[region][:nstates,:].max(axis=0))/(1e-6+combined_af[region][:nstates,:].sum(axis=0))
         #ind = combined_af[region][:nstates,:].sum(axis=0)<0.5
         #minor_af[region][ind]=np.nan
         #combined_entropy[region][ind]=np.nan
@@ -425,12 +426,16 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
             sc = (data['mut_rate'][region]/(0.0001+minor_af[region]))
             axs[0].plot(running_average(np.array(list(reference.annotation[region]))[ind], ws),
                         np.exp(running_average(np.log(sc[ind]), ws)),
-                        c=cols[ri], ls='--' if label_str=='synonymous' else '-')
+                        c=cols[ri%len(cols)], ls='--' if label_str=='synonymous' else '-',
+                        label=label_str if region=='gag' else None)
 
+    axs[0].legend(loc=2)
     axs[0].set_yscale('log')
+    axs[0].set_ylabel('selection coefficient [1/day]')
     draw_genome(axs[1], {k:val for k,val in reference.annotation.iteritems() if k in
-        ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp120', 'gp41', 'vif', 'V1', 'V2', 'V3', 'V5', 'RRE']})
-
+        ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp120', 'gp41', 'vif', 'vpu','vpr','rev','tat','V1', 'V2', 'V3', 'V5']})
+    plt.tight_layout()
+    plt.savefig('figures/cost_along_genome.pdf')
 
 
 # Script
@@ -444,17 +449,18 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     # note that HXB2 alignment has way more sequences resulting in better correlations
-    reference = HIVreference(refname='HXB2', subtype=args.subtype)
+    reference = HIVreference(refname='NL4-3', subtype=args.subtype)
     #from Bio.SeqFeature import SeqFeature, FeatureLocation
     #reference.annotation['gp41'] = SeqFeature(location=FeatureLocation(reference.annotation['gp41'].location.start, reference.annotation['gp41'].location.end+3))
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
-    regions = ['gag', 'pol', 'nef', 'vif', 'env']
+    regions = ['gag', 'pol', 'nef', 'vif', 'env', 'vpr', 'vpu']
     if not os.path.isfile(fn) or args.regenerate:
         #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
-        patient_codes = ['p2','p3','p4','p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+        patient_codes = ['p2','p3', 'p4', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+        #patient_codes = ['p2','p3','p5','p8', 'p9','p10', 'p11'] # subtype B only
         data = collect_data(patient_codes, regions, reference)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
