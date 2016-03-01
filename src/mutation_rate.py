@@ -196,6 +196,7 @@ def get_mutation_matrix(data):
     mu.name = 'mutation rate from longitudinal data'
     return mu
 
+
 def get_mutation_matrix_per_sample(data, plot=False):
     '''Calculate the mutation rate matrix'''
     aft_by_mut_pat = defaultdict(dict)
