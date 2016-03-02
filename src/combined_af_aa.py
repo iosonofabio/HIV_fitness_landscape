@@ -15,6 +15,7 @@ import pandas as pd
 from combined_af import process_average_allele_frequencies, draw_genome
 
 fs=16
+ERR_RATE = 2e-3
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette()
 plt.ion()
@@ -78,7 +79,9 @@ protective_positions = {
     'pol':{
     'PR':[35,93],
     'RT':[135, 245,277,369,395],
-    'INT':[11,32,119,122,124],}
+    'INT':[11,32,119,122,124],},
+    'env':{'gp120':[], 'gp41':[]},
+    'vif':{'vif':[]},
 }
 offsets = {
     'gag':-1,
@@ -86,6 +89,10 @@ offsets = {
     'nef':-1,
     'RT':55+99,
     'INT':55+99+440+120,
+    'gp120':-1,
+    'gp41':-1+481,
+    'env':-1,
+    'vif':-1
 }
 
 
@@ -104,7 +111,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
     for pi, p in enumerate(patients):
         pcode = p.name
         combined_af_by_pat[pcode] = np.zeros(reference.af.shape)
-        aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=1e-3)
+        aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, type='aa', error_rate=ERR_RATE)
 
         # get patient to subtype map and initial aa and nuc sequence
         patient_to_subtype = p.map_to_external_reference_aminoacids(region, refname = reference.refname)
@@ -189,11 +196,18 @@ def get_associations(regions, aa_ref='NL4-3'):
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         L = len(reference.entropy)
         associations[region]={}
-        subset = (hla_assoc.loc[:,"Protein"]==region)*(hla_assoc.loc[:,"QValue"]<0.1)
-        if region=="pol":
-            hla_assoc_pos = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1+56)
+        if region=='env':
+            subset = (hla_assoc.loc[:,"Protein"]=='gp120')*(hla_assoc.loc[:,"QValue"]<0.1)
+            A = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1)
+            subset = (hla_assoc.loc[:,"Protein"]=='gp41')*(hla_assoc.loc[:,"QValue"]<0.1)
+            B = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"]) + offsets['gp41'])
+            hla_assoc_pos = A|B
         else:
-            hla_assoc_pos = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1)
+            subset = (hla_assoc.loc[:,"Protein"]==region)*(hla_assoc.loc[:,"QValue"]<0.1)
+            if region=="pol":
+                hla_assoc_pos = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1+56)
+            else:
+                hla_assoc_pos = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1)
         associations[region]['HLA'] = hla_assoc_pos
         ppos = []
         for feat, positions in protective_positions[region].iteritems():
@@ -533,7 +547,7 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates):
             for pos in xrange(selcoeff[25].shape[0]):
                 selfile.write('\t'.join(map(str,[pos+1]+[sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
-def plot_drug_resistance_mutations(pcode):
+def plot_drug_resistance_mutation_trajectories(pcode):
     plt.figure()
     p = Patient.load(pcode)
     RT = p.get_allele_frequency_trajectories('RT', type='aa')
