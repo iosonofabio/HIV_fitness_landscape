@@ -21,6 +21,7 @@ from random import sample
 
 # Globals
 ERR_RATE = 2e-3
+af_cutoff = 1e-5
 sns.set_style('darkgrid')
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette()
@@ -135,6 +136,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
     good_pos_in_reference = reference.get_ungapped(threshold = 0.05)
     combined_af_by_pat = {}
     syn_nonsyn_by_pat={}
+    syn_nonsyn_by_pat_unconstrained={}
     region_start = int(reference.annotation[region].location.start)
     for pi, p in enumerate(patients):
         pcode= p.name
@@ -156,6 +158,9 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
 
             syn_nonsyn_by_pat[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
             syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
+                (p.get_syn_mutations(region, mask_constrained=True).sum(axis=0)>1)[patient_to_subtype[:,2]]
+            syn_nonsyn_by_pat_unconstrained[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
+            syn_nonsyn_by_pat_unconstrained[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
                 (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
             for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
                 if ysi<1:
@@ -168,7 +173,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
                             += w*pat_af[:,ind]
         except:
             import ipdb; ipdb.set_trace()
-    return combined_af_by_pat, syn_nonsyn_by_pat
+    return combined_af_by_pat, syn_nonsyn_by_pat, syn_nonsyn_by_pat_unconstrained
 
 
 def collect_data(patient_codes, regions, reference):
@@ -179,6 +184,7 @@ def collect_data(patient_codes, regions, reference):
     cov_min=1000
     combined_af_by_pat={}
     syn_nonsyn_by_pat={}
+    syn_nonsyn_by_pat_unconstrained={}
     consensus_mutation_rate={}
     patients = []
     with open('data/mutation_rate.pickle') as mutfile:
@@ -193,11 +199,13 @@ def collect_data(patient_codes, regions, reference):
         except:
             print("Can't load patient", pcode)
     for region in regions:
-        combined_af_by_pat[region], syn_nonsyn_by_pat[region] = collect_weighted_afs(region, patients, reference)
+        combined_af_by_pat[region], syn_nonsyn_by_pat[region], syn_nonsyn_by_pat_unconstrained[region] \
+            = collect_weighted_afs(region, patients, reference)
         consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc!='-' else np.nan for nuc in
                             reference.annotation[region].extract("".join(reference.consensus))])
 
-    return {'af_by_pat':combined_af_by_pat, 'mut_rate':consensus_mutation_rate, 'syn_by_pat':syn_nonsyn_by_pat}
+    return {'af_by_pat':combined_af_by_pat, 'mut_rate':consensus_mutation_rate, 'syn_by_pat':syn_nonsyn_by_pat,
+            'syn_by_pat_uc':syn_nonsyn_by_pat_unconstrained}
 
 
 def process_average_allele_frequencies(data, regions, nbootstraps = 0, bootstrap_type='bootstrap', nstates=4):
@@ -297,7 +305,7 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
         plt.savefig(fname)
 
 
-def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None, ref=None):
+def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates, fname=None, ref=None):
     '''
     produce figure of distribution of selection coefficients separately for
     synonymous and nonsynonymous sites.
@@ -305,15 +313,20 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None, r
     if ref is not None:
         if not hasattr(ref, 'fitness_cost'):
             ref.fitness_cost = np.zeros_like(ref.entropy)
-    fig, axs = plt.subplots(1,2,sharey=True)
+    fig, axs = plt.subplots(1,3,sharey=True, figsize=(10,6))
     #plt.title(region+' selection coefficients')
     if type(regions)==str:
         regions = [regions]
-    for ni,ax,label_str in ((0,axs[0], 'synonymous'), (1,axs[1], 'nonsynonymous')):
+    for ni,ax,label_str in ((0,axs[0], 'synonymous'), (1,axs[1], 'syn-overlaps'),  (2,axs[2], 'nonsyn')):
         slist = []
         for region in regions:
-            ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
-            slist.extend(mut_rates[region][ind]/(minor_af[region][ind]+0.0001))
+            if label_str=='synonymous':
+                ind = synnonsyn[region]
+            elif label_str=='syn-overlaps':
+                ind = synnonsyn_uc[region]&(~synnonsyn[region])
+            else:
+                ind = ~synnonsyn_uc[region]
+            slist.extend(mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff))
         s = np.array(slist)
         s[s>=0.1] = 0.1
         s[s<=0.001] = 0.001
@@ -321,7 +334,8 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, mut_rates, fname=None, r
             bg = ref.annotation[region].location.start
             ed = ref.annotation[region].location.end
             ref.fitness_cost[bg:ed][ind] = s
-        ax.hist(s, color=cols[ni],
+        if len(s):
+            ax.hist(s, color=cols[ni],
                  weights=np.ones(len(s), dtype=float)/len(s), bins=np.logspace(-3,-1,11), label=label_str+', n='+str(len(s)))
         ax.set_xscale('log')
         ax.tick_params(labelsize=fs*0.8)
@@ -349,8 +363,8 @@ def selcoeff_confidence(region, data, fname=None):
         process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
     minor_af_array=np.array(minor_af_bs[region])
     qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
-    scb = (data['mut_rate'][region]/(0.0001+qtiles)).T
-    sel_coeff_array = (data['mut_rate'][region]/(0.0001+minor_af_array))
+    scb = (data['mut_rate'][region]/(af_cutoff+qtiles)).T
+    sel_coeff_array = (data['mut_rate'][region]/(af_cutoff+minor_af_array))
     sel_coeff_array[sel_coeff_array<0.001]=0.001
     sel_coeff_array[sel_coeff_array>0.1]=0.1
     which_quantile = np.zeros(minor_af_array.shape[1], dtype=int)
@@ -392,7 +406,7 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference, fnam
             xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
             ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
             if label_str == 'all': ind = xsS>=0
-            s.append(mut_rate[region][ind]/(minor_af[region][ind]+0.0001))
+            s.append(mut_rate[region][ind]/(minor_af[region][ind]+af_cutoff))
             entropy.append(xsS[ind])
 
         s = np.concatenate(s)
@@ -445,7 +459,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
         for ri, region in enumerate(regions):
             ind = synnonsyn[region] if label_str=='synonymous' else ~synnonsyn[region]
             #axs[0].plot([x for x in reference.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
-            sc = (data['mut_rate'][region]/(0.0001+minor_af[region]))
+            sc = (data['mut_rate'][region]/(af_cutoff+minor_af[region]))
             sc[sc>0.1] = 0.1
             sc[sc<0.001] = 0.001
             axs[0].plot(running_average(np.array(list(reference.annotation[region]))[ind], ws),
@@ -495,7 +509,7 @@ def export_selection_coefficients(data, minor_af, synnonsyn):
             process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
         minor_af_array=np.array(minor_af_bs[region])
         qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
-        scb = (data['mut_rate'][region]/(0.0001+qtiles))
+        scb = (data['mut_rate'][region]/(af_cutoff+qtiles))
 
         with open('data/nuc_'+region+'_selection_coeffcients.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
@@ -519,12 +533,10 @@ if __name__=="__main__":
 
     # note that HXB2 alignment has way more sequences resulting in better correlations
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
-    #from Bio.SeqFeature import SeqFeature, FeatureLocation
-    #reference.annotation['gp41'] = SeqFeature(location=FeatureLocation(reference.annotation['gp41'].location.start, reference.annotation['gp41'].location.end+3))
 
     fn = 'data/avg_nucleotide_allele_frequency.pickle.gz'
 
-    regions = ['gag', 'pol', 'vif', 'vpr', 'vpu','env',  'nef']
+    regions = ['gag', 'pol', 'vif', 'vpr', 'vpu',  'nef']
     if not os.path.isfile(fn) or args.regenerate:
         #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
@@ -542,17 +554,24 @@ if __name__=="__main__":
 
     combined_af, combined_entropy, minor_af = process_average_allele_frequencies(data, regions, nbootstraps=0)
 
+    # if a site is syn in greater than half the number of patients, call as syn (factor 2 on LHS)
     synnonsyn = {region: 2*np.array([x for x in data['syn_by_pat'][region].values()]).sum(axis=0)>len(data['syn_by_pat'][region])
+                 for region in regions}
+    # repeat for syn score that does not account for overlapping reading frames
+    synnonsyn_unconstrained = {region: 2*np.array([x for x in data['syn_by_pat_uc'][region].values()]).sum(axis=0)>len(data['syn_by_pat_uc'][region])
                  for region in regions}
 
     for region in regions:
         entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.png')
         fraction_diverse(region, minor_af, synnonsyn, 'figures/'+region+'_minor_allele_frequency.pdf')
 
-        selcoeff_distribution(region, minor_af, synnonsyn, data['mut_rate'], 'figures/'+region+'_sel_coeff.png', ref=reference)
+    for region in regions:
+        selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
+                               data['mut_rate'], 'figures/'+region+'_sel_coeff.png', ref=reference)
         selcoeff_confidence(region, data, 'figures/'+region+'_sel_coeff_confidence.png')
 
-    selcoeff_distribution(regions, minor_af, synnonsyn,data['mut_rate'], 'figures/all_sel_coeff.png')
+    selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr'], minor_af, synnonsyn, synnonsyn_unconstrained,
+                          data['mut_rate'], 'figures/all_sel_coeff.png')
 
     avg_sel_coeff = selcoeff_vs_entropy(regions,  minor_af, synnonsyn,data['mut_rate'],
                                         reference,

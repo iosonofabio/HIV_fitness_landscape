@@ -232,6 +232,13 @@ def entropy_scatter(region, within_entropy, associations, reference,
     plt.figure(figsize = (7,6))
     npoints=20
     assoc_ind = associations[region]['HLA']|associations[region]['protective']
+    thres_xs = [0.0, 0.1, 10.0]
+    thres_xs = zip(thres_xs[:-1],thres_xs[1:])
+    nthres_xs=len(thres_xs)
+    thres_in = [0.0, 0.0001, 10.0]
+    thres_in = zip(thres_in[:-1],thres_in[1:])
+    nthres_in=len(thres_in)
+    enrichment = np.zeros((2,nthres_in, nthres_xs), dtype=int)
     for ni, tmp_imd, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
         ind = (xsS>=0.000)&tmp_imd&(~np.isnan(xsS))&(~np.isnan(combined_entropy[region]))
         plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label=label_str, s=30)
@@ -240,7 +247,11 @@ def entropy_scatter(region, within_entropy, associations, reference,
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
+            for ti1,(tl1, tu1) in enumerate(thres_in):
+                for ti2,(tl2, tu2) in enumerate(thres_xs):
+                    enrichment[ni>0, ti1, ti2] = np.sum((A[:,0]>=tl1)&(A[:,0]<tu1)&(A[:,1]>=tl2)&(A[:,1]<tu2))
 
+    print(enrichment, fisher_exact(enrichment[:,:,1]))
     # add labels to points of positions of interest (positions with protective variation)
     if annotate_protective:
         A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
@@ -261,6 +272,8 @@ def entropy_scatter(region, within_entropy, associations, reference,
     plt.tight_layout()
     if fname is not None:
         plt.savefig(fname)
+
+    return enrichment
 
 def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname = None):
     '''
@@ -658,13 +671,14 @@ if __name__=="__main__":
     aa_ref='NL4-3'
     global_ref = HIVreference(refname=aa_ref)
 
+    erich = np.zeros((2,2,2))
     for region in regions:
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         if region=='pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates, fname='figures/hinkley_comparison.pdf')
-        entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
+        erich+=entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
 
         for phenotype, vals in data['pheno'][region].iteritems():
             try:
