@@ -235,12 +235,13 @@ def entropy_scatter(region, within_entropy, associations, reference,
     for ni, tmp_imd, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
         ind = (xsS>=0.000)&tmp_imd&(~np.isnan(xsS))&(~np.isnan(combined_entropy[region]))
         plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label=label_str, s=30)
-        if running_avg:
+        if running_avg: # add a running average to the scatter plot averaging over npoints on both axis
             A = np.array(sorted(zip(combined_entropy[region][ind]+0.0000, xsS[ind]+0.005), key=lambda x:x[0]))
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
 
+    # add labels to points of positions of interest (positions with protective variation)
     if annotate_protective:
         A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
         for feat, positions in protective_positions[region].iteritems():
@@ -262,6 +263,11 @@ def entropy_scatter(region, within_entropy, associations, reference,
         plt.savefig(fname)
 
 def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname = None):
+    '''
+    scatter minor within patient variation against phenotypes associated to positions in proteins
+    such as disorder scores, solvent accessible area or ddG calcuations. the values come from
+    Li et al Retrovirology 2015 and Carlson, personal communication
+    '''
     ind = phenotype!=0
     print(region, phenotype_name)
     print("Pearson:", pearsonr(within_entropy[region][ind], phenotype[ind]))
@@ -282,16 +288,43 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
         plt.savefig(fname)
 
 
-def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa):
+def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa, nbootstraps=0):
+    '''
+    determine the fitness cost associated with a particular amino acid mutations such as K103N
+    this requires specification of the target amino acid and a specific calculation of
+    the mutation rate into the amino acid, which requires the ancestral codon present in
+    each individual patient
+    '''
+    def s(pats):
+        # calcute nu/mu for each patient with patient specific mutation rates excluding double hit mutations
+        nu_over_mu = [minor_af_by_pat[pat]/aa_mutation_rates[(codons[pat][pos],target_aa)] for pat in pats
+                     if aa_mutation_rates[(codons[pat][pos],target_aa)]>0]
+        # return the inverse, i.e. essentially the harmonic mean
+        if len(nu_over_mu):
+            savg = 1.0/max(0.01, np.mean(nu_over_mu))
+        else:
+            savg=np.nan
+        return savg
+
     target_ii = alphaal.index(target_aa)
     codons = data['init_codon'][region]
     minor_af_by_pat = {pat: x[target_ii,pos].sum(axis=0)/x[:20,pos].sum(axis=0)
                         for pat, x in data['af_by_pat'][region].iteritems() if pos in codons[pat]}
+    all_patients = minor_af_by_pat.keys()
 
-    print(pos, target_aa,[codons[pat][pos] for pat in codons], [aa_mutation_rates[(codons[pat][pos],target_aa)] for pat in codons])
-    nu_over_mu = [(1e-5+nu)/aa_mutation_rates[(codons[pat][pos],target_aa)] for pat, nu in minor_af_by_pat.iteritems()]
-    return 1.0/np.mean(nu_over_mu)
-
+    if nbootstraps:
+        s_bs = []
+        for bi in xrange(nbootstraps):
+            tmp_s = s([all_patients[pi] for pi in np.random.randint(len(all_patients), size=len(all_patients))])
+            if not np.isnan(tmp_s):
+                s_bs.append(tmp_s)
+        if len(s_bs):
+            s_out = [np.percentile(s_bs, perc) for perc in [5, 25, 50, 75,95]]
+        else:
+            s_out = [np.nan for perc in [5, 25, 50, 75,95]]
+    else:
+        s_out = s(all_patients)
+    return s_out
 
 def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nbootstraps=None):
     codons = data['init_codon'][region]
@@ -338,6 +371,9 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
     plt.xscale('log')
 
 def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
+    '''
+    compare the distribution of selection coefficients among different regions in the genome
+    '''
     plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
@@ -358,7 +394,11 @@ def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
 
     return selcoeff
 
-def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_nonsyn_mutation_rates, plot=False):
+def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_nonsyn_mutation_rates, plot=False, cumulative=True):
+    '''
+    compare the distribution of selection coefficients between sites with a phenotype above of below
+    the threshold. optionally plots the distribution
+    '''
     if plot: plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
@@ -372,11 +412,18 @@ def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_
         selcoeff[region] = (sc[above], sc[below])
         if plot:
             n=len(selcoeff[region][0])
-            y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
-            plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' above', ls='--', c=cols[ri], lw=3)
-            n=len(selcoeff[region][1])
-            y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
-            plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' below', c=cols[ri], lw=3)
+            if cumulative:
+                ab = selcoeff[region][0][~np.isnan(selcoeff[region][0])]
+                bl = selcoeff[region][1][~np.isnan(selcoeff[region][1])]
+                plt.plot(sorted(ab), np.linspace(0,1,len(ab)), label=region+' below', ls='--', c=cols[ri], lw=3)
+                plt.plot(sorted(bl), np.linspace(0,1,len(bl)), label=region+' above', ls='-', c=cols[ri], lw=3)
+            else:
+                y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+                plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' above', ls='--', c=cols[ri], lw=3)
+                n=len(selcoeff[region][1])
+                y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+                plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' below', c=cols[ri], lw=3)
+
 
     if plot:
         plt.legend(loc=2)
@@ -384,11 +431,18 @@ def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_
     from scipy.stats import ks_2samp
     KS = {}
     for r1 in regions:
-        KS[r1] = ks_2samp(selcoeff[r1][0], selcoeff[r1][1])
-        print(r1, KS[r1])
+        try:
+            KS[r1] = ks_2samp(selcoeff[r1][0], selcoeff[r1][1])
+            print(r1, KS[r1])
+        except:
+            print(r1, pheno, 'failed')
     return KS
 
 def selection_coefficients_compare_association(association, associations, regions, data, total_nonsyn_mutation_rates):
+    '''
+    essentially the same as selection_coefficients_compare_pheno but for binary associations rather than
+    continuous phenotypes.
+    '''
     plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
@@ -425,7 +479,7 @@ def compare_experiments(data, aa_mutation_rates):
         offset = offsets[mut['feature']]
         aa, pos = mut['mutation'][-1], int(mut['mutation'][1:-1])+offset
         coefficients[(mut['feature'], mut['mutation'])] = (mut['normalized'],
-            selection_coefficient_mutation(region, data, aa_mutation_rates, pos, aa))
+            selection_coefficient_mutation(region, data, aa_mutation_rates, pos, aa, nbootstraps=100))
 
     return coefficients
 
@@ -525,6 +579,10 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
         plt.savefig(fname)
 
 def export_selection_coefficients(data, total_nonsyn_mutation_rates):
+    '''
+    write selection coefficients as tab separated files
+    files contain position and 25%, 50% and 75% of 100 bootstrap replicates
+    '''
     from scipy.stats import scoreatpercentile
     def sel_out(s):
         if s<0.001:
@@ -548,6 +606,10 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates):
                 selfile.write('\t'.join(map(str,[pos+1]+[sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
 def plot_drug_resistance_mutation_trajectories(pcode):
+    '''
+    auxillary function to check for potential drug resistance evolution in RNA sequences
+    only p10 has drug resistance mutations in the last two samples
+    '''
     plt.figure()
     p = Patient.load(pcode)
     RT = p.get_allele_frequency_trajectories('RT', type='aa')
@@ -579,7 +641,7 @@ if __name__=="__main__":
     if not os.path.isfile(fn) or args.regenerate:
         #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
         #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
-        patient_codes = ['p2','p3','p4','p5', 'p8', 'p9','p10', 'p11'] # subtype B only
+        patient_codes = ['p2','p3','p5', 'p7','p8', 'p9','p10', 'p11'] # subtype B only
         data = collect_data(patient_codes, regions)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
@@ -605,11 +667,15 @@ if __name__=="__main__":
         entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
 
         for phenotype, vals in data['pheno'][region].iteritems():
-            print(phenotype)
-            phenotype_scatter(region, combined_entropy, vals, phenotype)
-
+            try:
+                print(phenotype)
+                phenotype_scatter(region, combined_entropy, vals, phenotype)
+            except:
+                print("Phenotype scatter failed for:",region, phenotype)
 
 plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
+
+export_selection_coefficients(data, total_nonsyn_mutation_rates)
 
 sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
 
@@ -624,7 +690,7 @@ for thres in np.linspace(0,3,21):
 pval = np.array(pval)
 plt.plot(pval[:,0], pval[:,1])
 
-KS_disorder = selection_coefficients_compare_pheno('disorder', 0.75, regions, data, total_nonsyn_mutation_rates, plot =True)
+KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions, data, total_nonsyn_mutation_rates, plot =True)
 
 KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions, data, total_nonsyn_mutation_rates, plot=True)
 
