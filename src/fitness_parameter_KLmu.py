@@ -12,7 +12,7 @@ import argparse
 import numpy as np
 from scipy import linalg as LA
 from scipy import optimize
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 
 # FIXME: the following line is bad practice, please use your PYTHONPATH
@@ -182,7 +182,136 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
     sD = amoeba_vp(KL_simult,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
     return sD**2
 
+def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
+    '''Simultaneous KL divergence minimization for several quantiles''' 
+    def Kkq_gauss(s,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
+        else:
+            return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
+    
+    def Kkq_sqrt(s,mu,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/(2*s**2)
+        else:
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0/2
+    
+    def KL_multipat(smuD):
+        mu = smuD[q]**2; D0 = smuD[q+1]**2; ss = smuD[:q]**2
+        Like = np.zeros((len(tk_all),q))
+        for jpat, tk in enumerate(tk_all):
+            dtk = np.zeros(tk.shape[0]); dtk[0] = tk[0]; dtk[1:] = np.diff(tk)
+            for jq in xrange(q):
+#                s = smuD[jq]**2
+                Akq = akq_mat(ss[jq],dtk)/D0
+                b_k = mu*(1-np.exp(-(ss[jq]+h)*tk))/(ss[jq]+h)
+#                if gx is None:
+#                    Akq = akq_mat(ss[jq],dtk)/D0
+##                    Akq = LA.inv(Kkq_gauss(ss[jq],D0,tk))
+#                elif gx == 'sqrt':
+#                    Akq = LA.inv(Kkq_sqrt(ss[jq],mu,D0,tk))
+#                if ss[jq] > h/np.min(dtk):
+#                    b_k = mu*(1-np.exp(-ss[jq]*tk))/ss[jq]
+#                else:
+#                    b_k = mu*tk
+                Like[jpat,jq] = -.5*np.log(LA.det(Akq)) + 0.5*(xk_q_all[jpat][jq,:]-b_k).dot(Akq).dot(xk_q_all[jpat][jq,:]-b_k)+\
+                + .5*np.trace(Ckq_q_all[jpat][jq,:,:].dot(Akq))
+        if np.isnan(Like).any():
+            print smuD**2, Like
+        return Like.sum()
+        
+    q = xk_q_all[0].shape[0]
+    smuD0 = 10**(-3)*np.ones(q+2)
+    step = 10**(-4)*np.ones(q+2)
+    tol = h
+    smuD = amoeba_vp(KL_multipat,smuD0,args=(),a = step,tol_x = tol,tol_f = tol)
+    return smuD**2
+    
+def fit_upper_multipat(xk_q_all,tk_all,LL = None):
+    '''Fitting the quantile data with a linear law'''
+    def fit_upper_chi2(mu):
+        chi2 = np.zeros(len(tk_all))
+        for jpat, tk in enumerate(tk_all):
+#            chi2[jpat] = np.zeros(xk_q.shape)
+            chi2[jpat] = ((xk_q_all[jpat][-1,:] - mu*tk)**2).sum()
+        return LL.dot(chi2)
+    if LL is None:
+        LL = np.ones(len(tk_all))
+    res = optimize.minimize_scalar(fit_upper_chi2)
+    return res.x
 
+def KLfit_multipat_mu(Ckq_q_all,xk_q_all,tk_all,mu,gx = None):
+    '''Simultaneous KL divergence minimization for several quantiles''' 
+    def Kkq_gauss(s,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
+        else:
+            return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
+    
+    def Kkq_sqrt(s,mu,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/(2*s**2)
+        else:
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0/2
+        
+    def KL_multipat(sD):
+        D0 = sD[-1]**2
+        Like = np.zeros((len(tk_all),q))
+        for jpat, tk in enumerate(tk_all):
+            dtk = np.zeros(tk.shape[0]); dtk[0] = tk[0]; dtk[1:] = np.diff(tk)
+            for jq in xrange(q):
+                s = sD[jq]**2
+#                Akq = akq_mat(s,dtk)/D0
+#                b_k = mu*(1-np.exp(-(s+h)*tk))/(s+h)
+                if gx is None:
+                    Akq = akq_mat(s,dtk)/D0
+#                    Akq = LA.inv(Kkq_gauss(s,D0,tk))
+                elif gx == 'sqrt':
+                    Akq = LA.inv(Kkq_sqrt(s,mu,D0,tk))
+                if s > h/np.min(dtk):
+                    b_k = mu*(1-np.exp(-s*tk))/s
+                else:
+                    b_k = mu*tk
+                Like[jpat,jq] = -.5*np.log(LA.det(Akq)) + 0.5*(xk_q_all[jpat][jq,:]-b_k).dot(Akq).dot(xk_q_all[jpat][jq,:]-b_k)+\
+                + .5*np.trace(Ckq_q_all[jpat][jq,:,:].dot(Akq))
+        if np.isnan(Like).any():
+            print sD**2, Like
+        return Like.sum()
+        
+    q = xk_q_all[0].shape[0]
+    sD0 = 10**(-3)*np.ones(q+1)
+    step = 10**(-4)*np.ones(q+1)
+    tol = h
+    sD = amoeba_vp(KL_multipat,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
+    return sD**2
+
+def akq_mat(s,dt_k):
+    if s > h/np.min(dt_k):
+        a0 =  2*s/(1-np.exp(-2*s*dt_k))
+        a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
+        a1 = - 2*s*np.exp(-s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:])) 
+    else:
+        a0 =  1/dt_k
+        a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
+        a1 = -(1.- s*dt_k[1:])/dt_k[1:]
+    return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
+    
 def amoeba_vp(func, x0, args=(),
               Nit=10**4,
               a=None,
@@ -293,7 +422,7 @@ if __name__=="__main__":
         if not os.path.exists(outdir_name):
             os.makedirs(outdir_name)
 
-    tt_all = []; xk_q_all = []
+    tt_all = []; xk_q_all = []; Ckq_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
     smuD_KLmu_q = np.zeros((len(patient_names),q+2))
     Lq = np.zeros((len(patient_names),q),dtype = 'int')
@@ -362,31 +491,56 @@ if __name__=="__main__":
         # KL fitting fitness coefficients for the given mutation rate
         ii_sD = range(q+2); ii_sD.remove(q)
         smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q],gx = gx)
-        xk_q_all.append(xk_q)
+        xk_q_all.append(xk_q); Ckq_q_all.append(Ckq_q)
 
+    # Simultaneous fit for all patients
+    smuD_KL_q_multipat = KLfit_multipat(Ckq_q_all,xk_q_all,tt_all,gx = gx)
+    
+    # Simultaneous fit for all patients given a mutation rate
+    smuD_KL_q_multipat_mu = np.zeros(q+2)
+    smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
+    smuD_KL_q_multipat_mu[ii_sD] = KLfit_multipat_mu(Ckq_q_all,xk_q_all,tt_all,smuD_KL_q_multipat_mu[q],gx = gx)
+    
     # Saving fitness coefficients and mutation rates
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
     if outdir_name is not None:
         np.savetxt(outdir_name+'smuD_KL.txt', smuD_KLsim_q, header='\t\t\t'.join(header))
         np.savetxt(outdir_name+'smuD_KLmu.txt', smuD_KLmu_q, header='\t\t\t'.join(header))
-
+        np.savetxt(outdir_name + 'smuD_KL_multi.txt',np.array([smuD_KL_q_multipat]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_multi.txt',np.array([smuD_KL_q_multipat_mu]),header = '\t\t\t'.join(header))
+    
         qbord = list(Squant[0]['range']) + [Squant[i]['range'][1] for i in xrange(1, len(Squant))]
         np.savetxt(outdir_name+'smuD_KL_quantiles.txt', qbord)
 
     '''Bootstrapping'''
-    Nboot = 10**4
+    Nboot = 10**2
     smuD_boot = np.zeros((Nboot,q+2))
     smuD_boot_mu = np.zeros((Nboot,q+2))
+    smuD_multipat_boot = np.zeros((Nboot,q+2))
+    smuD_multipat_boot_mu = np.zeros((Nboot,q+2))
     for jboot in xrange(Nboot):
-        smuD_boot[jboot,:] = smuD_KLsim_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
-        smuD_boot_mu[jboot,:] = smuD_KLmu_q[np.random.randint(0,len(patient_names),len(patient_names)),:].mean(axis=0)
+        print 'bootstrap #', jboot
+        pp = np.random.randint(0,len(patient_names),len(patient_names))
+        smuD_boot[jboot,:] = smuD_KLsim_q[pp,:].mean(axis=0)
+        smuD_boot_mu[jboot,:] = smuD_KLmu_q[pp,:].mean(axis=0)
+        smuD_multipat_boot[jboot,:] = KLfit_multipat([Ckq_q_all[p] for p in pp],[xk_q_all[p] for p in pp],[tt_all[p] for p in pp],gx = gx)
+        smuD_multipat_boot_mu[jboot,q] = fit_upper_multipat([xk_q_all[p] for p in pp],[tt_all[p] for p in pp])
+        smuD_multipat_boot_mu[jboot,ii_sD] = KLfit_multipat_mu([Ckq_q_all[p] for p in pp],\
+        [xk_q_all[p] for p in pp],[tt_all[p] for p in pp],smuD_multipat_boot_mu[jboot,q],gx = gx)
     
     smuD_boot_mean = smuD_boot.mean(axis=0)
     smuD_boot_sigma = np.sqrt((smuD_boot**2).mean(axis=0) - smuD_boot.mean(axis=0)**2)
     smuD_boot_mu_mean = smuD_boot_mu.mean(axis=0)
     smuD_boot_mu_sigma = np.sqrt((smuD_boot_mu**2).mean(axis=0) - smuD_boot_mu.mean(axis=0)**2)
+    smuD_multipat_boot_mean = smuD_multipat_boot.mean(axis=0)
+    smuD_multipat_boot_sigma = np.sqrt((smuD_multipat_boot**2).mean(axis=0) - smuD_multipat_boot.mean(axis=0)**2)
+    smuD_multipat_boot_mu_mean = smuD_multipat_boot_mu.mean(axis=0)
+    smuD_multipat_boot_mu_sigma = np.sqrt((smuD_multipat_boot_mu**2).mean(axis=0) - smuD_multipat_boot_mu.mean(axis=0)**2)
+    
     
     if outdir_name is not None:
         np.savetxt(outdir_name + 'smuD_KL_boot.txt',np.array([smuD_boot_mean, smuD_boot_sigma]),header = '\t\t\t'.join(header))
         np.savetxt(outdir_name + 'smuD_KLmu_boot.txt',np.array([smuD_boot_mu_mean, smuD_boot_mu_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KL_multi_boot.txt',np.array([smuD_multipat_boot_mean, smuD_multipat_boot_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_multi_boot.txt',np.array([smuD_multipat_boot_mu_mean, smuD_multipat_boot_mu_sigma]),header = '\t\t\t'.join(header))
