@@ -21,6 +21,8 @@ from random import sample
 
 # Globals
 ERR_RATE = 2e-3
+WEIGHT_CUTOFF = 500
+SAMPLE_AGE_CUTOFF = 2 # years
 af_cutoff = 1e-5
 sns.set_style('darkgrid')
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
@@ -164,12 +166,12 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
             syn_nonsyn_by_pat_unconstrained[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
                 (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
             for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
-                if ysi<1:
+                if ysi<SAMPLE_AGE_CUTOFF:
                     continue
                 pat_af = af[:,patient_to_subtype[:,2]]
                 patient_consensus = pat_af.argmax(axis=0)
                 ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
-                w = depth/(1.0+depth/300.0)
+                w = depth/(1.0+depth/WEIGHT_CUTOFF)
                 combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-region_start] \
                             += w*pat_af[:,ind]
         except:
@@ -301,6 +303,7 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None, 
     plt.tight_layout()
     if fname is not None:
         plt.savefig(fname)
+    return enrichment
 
 
 def fraction_diverse(region, minor_af, synnonsyn, fname=None):
@@ -583,10 +586,12 @@ if __name__=="__main__":
     synnonsyn_unconstrained = {region: 2*np.array([x for x in data['syn_by_pat_uc'][region].values()]).sum(axis=0)>len(data['syn_by_pat_uc'][region])
                  for region in regions}
 
+    E = np.zeros((2,2,2))
     for region in regions:
-        entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.png')
+        E+=entropy_scatter(region, combined_entropy, synnonsyn, reference, 'figures/'+region+'_entropy_scatter.png')
         fraction_diverse(region, minor_af, synnonsyn, 'figures/'+region+'_minor_allele_frequency.pdf')
-
+    from scipy.stats import fisher_exact
+    print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
     for region in regions:
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'], 'figures/'+region+'_sel_coeff.png', ref=reference)

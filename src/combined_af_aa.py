@@ -16,6 +16,7 @@ from combined_af import process_average_allele_frequencies, draw_genome
 
 fs=16
 ERR_RATE = 2e-3
+WEIGHT_CUTOFF = 500
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette()
 plt.ion()
@@ -158,7 +159,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
             pat_af = af[:,patient_to_subtype[:,1]]
             patient_consensus = pat_af.argmax(axis=0)
             ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
-            w = depth/(1.0+depth/300.0)
+            w = depth/(1.0+depth/WEIGHT_CUTOFF)
             combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]] \
                         += w*pat_af[:-1,ind]
     for pheno in combined_phenos:
