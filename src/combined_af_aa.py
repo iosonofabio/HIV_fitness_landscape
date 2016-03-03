@@ -166,7 +166,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
     return combined_af_by_pat, initial_codons_by_pat, combined_phenos
 
 
-def collect_data(patient_codes, regions):
+def collect_data(patient_codes, regions, subtype):
     cov_min=1000
     combined_af_by_pat={}
     initial_codons_by_pat={}
@@ -182,7 +182,7 @@ def collect_data(patient_codes, regions):
             print("Can't load patient", pcode)
 
     for region in regions:
-        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = subtype)
         combined_af_by_pat[region], initial_codons_by_pat[region], combined_phenos[region] =\
             collect_weighted_aa_afs(region, patients, reference, cov_min=cov_min)
 
@@ -223,7 +223,7 @@ def entropy_scatter(region, within_entropy, associations, reference,
     intrapatient frequencies amino acid frequencies
     '''
     xsS = reference.entropy
-    ind = xsS>=0.000
+    ind = (xsS>=0.000)&(~np.isnan(within_entropy[region]))
     print(region)
     print("Pearson:", pearsonr(within_entropy[region][ind], xsS[ind]))
     rho, pval = spearmanr(within_entropy[region][ind], xsS[ind])
@@ -239,11 +239,11 @@ def entropy_scatter(region, within_entropy, associations, reference,
     thres_in = zip(thres_in[:-1],thres_in[1:])
     nthres_in=len(thres_in)
     enrichment = np.zeros((2,nthres_in, nthres_xs), dtype=int)
-    for ni, tmp_imd, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
-        ind = (xsS>=0.000)&tmp_imd&(~np.isnan(xsS))&(~np.isnan(combined_entropy[region]))
-        plt.scatter(within_entropy[region][ind]+.00003, xsS[ind]+.005, c=cols[ni], label=label_str, s=30)
+    for ni, assoc_ind, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
+        tmp_ind = assoc_ind&ind
+        plt.scatter(within_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
         if running_avg: # add a running average to the scatter plot averaging over npoints on both axis
-            A = np.array(sorted(zip(combined_entropy[region][ind]+0.0000, xsS[ind]+0.005), key=lambda x:x[0]))
+            A = np.array(sorted(zip(combined_entropy[region][tmp_ind]+0.0000, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
@@ -251,6 +251,7 @@ def entropy_scatter(region, within_entropy, associations, reference,
                 for ti2,(tl2, tu2) in enumerate(thres_xs):
                     enrichment[ni>0, ti1, ti2] = np.sum((A[:,0]>=tl1)&(A[:,0]<tu1)&(A[:,1]>=tl2)&(A[:,1]<tu2))
 
+    from scipy.stats import fisher_exact
     print(enrichment, fisher_exact(enrichment[:,:,1]))
     # add labels to points of positions of interest (positions with protective variation)
     if annotate_protective:
@@ -646,16 +647,19 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='amino acid allele frequencies, saturation levels, and fitness costs')
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data")
+    parser.add_argument('--subtype', choices=['B', 'any'], default='B',
+                        help='subtype to compare against')
     args = parser.parse_args()
 
     fn = 'data/avg_aa_allele_frequency.pickle.gz'
 
     regions = ['gag', 'pol', 'nef', 'env', 'vif']
     if not os.path.isfile(fn) or args.regenerate:
-        #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
-        #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
-        patient_codes = ['p2','p3','p5', 'p7','p8', 'p9','p10', 'p11'] # subtype B only
-        data = collect_data(patient_codes, regions)
+        if args.subtype=='B':
+            patient_codes = ['p2','p3', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+        else:
+            patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
+        data = collect_data(patient_codes, regions, args.subtype)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
     else:
@@ -669,13 +673,13 @@ if __name__=="__main__":
 
 
     aa_ref='NL4-3'
-    global_ref = HIVreference(refname=aa_ref)
+    global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
 
     erich = np.zeros((2,2,2))
     for region in regions:
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
-        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         if region=='pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates, fname='figures/hinkley_comparison.pdf')
         erich+=entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
