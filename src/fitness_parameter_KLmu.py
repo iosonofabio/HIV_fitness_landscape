@@ -477,7 +477,8 @@ if __name__=="__main__":
 
     # Simultaneous fit for all patients given a mutation rate
     smuD_KL_q_multipat_mu = np.zeros(q+2)
-    smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
+    #smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
+    smuD_KL_q_multipat_mu[q] = 1.2e*5 # fixed mutation rate.
     smuD_KL_q_multipat_mu[ii_sD] = KLfit_multipat_mu(Ckq_q_all,xk_q_all,tt_all,smuD_KL_q_multipat_mu[q],gx = gx)
 
     # Saving fitness coefficients and mutation rates
@@ -504,7 +505,8 @@ if __name__=="__main__":
         smuD_boot[jboot,:] = smuD_KLsim_q[pp,:].mean(axis=0)
         smuD_boot_mu[jboot,:] = smuD_KLmu_q[pp,:].mean(axis=0)
         smuD_multipat_boot[jboot,:] = KLfit_multipat([Ckq_q_all[p] for p in pp],[xk_q_all[p] for p in pp],[tt_all[p] for p in pp],gx = gx)
-        smuD_multipat_boot_mu[jboot,q] = fit_upper_multipat([xk_q_all[p] for p in pp],[tt_all[p] for p in pp])
+        smuD_multipat_boot_mu[jboot,q] = 1.2e-5 # fixed mutation rate
+        #smuD_multipat_boot_mu[jboot,q] = fit_upper_multipat([xk_q_all[p] for p in pp],[tt_all[p] for p in pp])
         smuD_multipat_boot_mu[jboot,ii_sD] = KLfit_multipat_mu([Ckq_q_all[p] for p in pp],\
         [xk_q_all[p] for p in pp],[tt_all[p] for p in pp],smuD_multipat_boot_mu[jboot,q],gx = gx)
 
