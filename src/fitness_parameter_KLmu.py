@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import sys, os
 
 
-sys.path.append('/ebio/ag-neher/share/users/vpuller/HIVEVO/HIVEVO_access')
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 
@@ -44,11 +43,13 @@ def fit_upper(xka,t_k):
 def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     '''Simultaneous KL divergence minimization for several quantiles'''
     def Kkq_gauss(s,D0):
-        '''Correlation matrix'''
+        '''Covariance matrix for Gaussian model
+        s - fitness parameter
+        D0 - diffusion coefficient'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
-        if s > h:
+        if s > h/np.min(dt_k):
             return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
@@ -58,10 +59,10 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
-        if s > h:
-            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))*mu*D0/(2*s**2)
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/s**2
         else:
-            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)*mu*D0/2
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0
 
     def KL_simult(smuD):
         mu = smuD[q]**2; D0 = smuD[q+1]**2
@@ -99,24 +100,12 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     return smuD**2
 
 
-'''Kullback-Leibler fitting for fixed mutation rate'''
-
-def akq_mat(s,dt_k):
-    if s > h/np.min(dt_k):
-        a0 =  2*s/(1-np.exp(-2*s*dt_k))
-        a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
-        a1 = - 2*s*np.exp(-s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
-    else:
-        a0 =  1/dt_k
-        a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
-        a1 = -(1.- s*dt_k[1:])/dt_k[1:]
-    return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
-
-def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
-    '''Simultaneous KL divergence minimization for several quantiles
-    for a fixed mutation rate'''
+def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
+    '''Simultaneous KL divergence minimization for quantiles for a fixed mutation rate'''
     def Kkq_gauss(s,D0):
-        '''Correlation matrix'''
+        '''Covariance matrix for Gaussian model
+        s - fitness parameter
+        D0 - diffusion coefficient'''
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -125,13 +114,31 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
+    def Kkq_sqrt(s,mu,D0):
+        '''Covariance matrix for square-root model
+        s - fitness parameter
+        mu-mutation rate
+        D0 - diffusion coefficient'''
+        t_kq = np.tile(t_k,(t_k.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/s**2
+        else:
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0
+
     def KL_simult(sD):
         D0 = sD[-1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
             s = sD[jq]**2
-#            Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
-            Akq0 = LA.inv(Kkq_gauss(s,D0/Lq[jq]))
+            #Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
+#            Akq0 = LA.inv(Kkq_gauss(s,D0/Lq[jq]))
+            if gx is None:
+#                Akq0 = akq_mat(s,dt_k)*Lq[jq]/D0
+                Akq0 = LA.inv(Kkq_gauss(s,D0/Lq[jq]))
+            elif gx == 'sqrt':
+                Akq0 = LA.inv(Kkq_sqrt(s,mu,D0/Lq[jq]))
             if np.isinf(Akq0).any():
                 print sD**2
                 print Akq0
@@ -158,8 +165,142 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None):
     sD = amoeba_vp(KL_simult,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
     return sD**2
 
+def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
+    '''Simultaneous KL divergence minimization for several quantiles'''
+    def Kkq_gauss(s,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
+        else:
+            return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
-def amoeba_vp(func,x0,args = (),Nit = 10**4,a = None,tol_x = 10**(-4),tol_f = 10**(-4),return_f = False):
+    def Kkq_sqrt(s,mu,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/(2*s**2)
+        else:
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0/2
+
+    def KL_multipat(smuD):
+        mu = smuD[q]**2; D0 = smuD[q+1]**2; ss = smuD[:q]**2
+        Like = np.zeros((len(tk_all),q))
+        for jpat, tk in enumerate(tk_all):
+            dtk = np.zeros(tk.shape[0]); dtk[0] = tk[0]; dtk[1:] = np.diff(tk)
+            for jq in xrange(q):
+#                s = smuD[jq]**2
+                Akq = akq_mat(ss[jq],dtk)/D0
+                b_k = mu*(1-np.exp(-(ss[jq]+h)*tk))/(ss[jq]+h)
+#                if gx is None:
+#                    Akq = akq_mat(ss[jq],dtk)/D0
+##                    Akq = LA.inv(Kkq_gauss(ss[jq],D0,tk))
+#                elif gx == 'sqrt':
+#                    Akq = LA.inv(Kkq_sqrt(ss[jq],mu,D0,tk))
+#                if ss[jq] > h/np.min(dtk):
+#                    b_k = mu*(1-np.exp(-ss[jq]*tk))/ss[jq]
+#                else:
+#                    b_k = mu*tk
+                Like[jpat,jq] = -.5*np.log(LA.det(Akq)) + 0.5*(xk_q_all[jpat][jq,:]-b_k).dot(Akq).dot(xk_q_all[jpat][jq,:]-b_k)+\
+                + .5*np.trace(Ckq_q_all[jpat][jq,:,:].dot(Akq))
+        if np.isnan(Like).any():
+            print smuD**2, Like
+        return Like.sum()
+
+    q = xk_q_all[0].shape[0]
+    smuD0 = 10**(-3)*np.ones(q+2)
+    step = 10**(-4)*np.ones(q+2)
+    tol = h
+    smuD = amoeba_vp(KL_multipat,smuD0,args=(),a = step,tol_x = tol,tol_f = tol)
+    return smuD**2
+
+def fit_upper_multipat(xk_q_all,tk_all,LL = None):
+    '''Fitting the quantile data with a linear law'''
+    def fit_upper_chi2(mu):
+        chi2 = np.zeros(len(tk_all))
+        for jpat, tk in enumerate(tk_all):
+#            chi2[jpat] = np.zeros(xk_q.shape)
+            chi2[jpat] = ((xk_q_all[jpat][-1,:] - mu*tk)**2).sum()
+        return LL.dot(chi2)
+    if LL is None:
+        LL = np.ones(len(tk_all))
+    res = optimize.minimize_scalar(fit_upper_chi2)
+    return res.x
+
+def KLfit_multipat_mu(Ckq_q_all,xk_q_all,tk_all,mu,gx = None):
+    '''Simultaneous KL divergence minimization for several quantiles'''
+    def Kkq_gauss(s,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-2*s*tmin_kq))*D0/(2*s)
+        else:
+            return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
+
+    def Kkq_sqrt(s,mu,D0,tk):
+        '''Correlation matrix'''
+        t_kq = np.tile(tk,(tk.shape[0],1))
+        dt_kq = np.abs(t_kq - t_kq.T)
+        tmin_kq = (t_kq + t_kq.T -dt_kq)/2
+        if s > h/np.min(dt_k):
+            return np.exp(-s*dt_kq)*(1. - np.exp(-s*tmin_kq))**2*mu*D0/(2*s**2)
+        else:
+            return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0/2
+
+    def KL_multipat(sD):
+        D0 = sD[-1]**2
+        Like = np.zeros((len(tk_all),q))
+        for jpat, tk in enumerate(tk_all):
+            dtk = np.zeros(tk.shape[0]); dtk[0] = tk[0]; dtk[1:] = np.diff(tk)
+            for jq in xrange(q):
+                s = sD[jq]**2
+#                Akq = akq_mat(s,dtk)/D0
+#                b_k = mu*(1-np.exp(-(s+h)*tk))/(s+h)
+                if gx is None:
+                    Akq = akq_mat(s,dtk)/D0
+#                    Akq = LA.inv(Kkq_gauss(s,D0,tk))
+                elif gx == 'sqrt':
+                    Akq = LA.inv(Kkq_sqrt(s,mu,D0,tk))
+                if s > h/np.min(dtk):
+                    b_k = mu*(1-np.exp(-s*tk))/s
+                else:
+                    b_k = mu*tk
+                Like[jpat,jq] = -.5*np.log(LA.det(Akq)) + 0.5*(xk_q_all[jpat][jq,:]-b_k).dot(Akq).dot(xk_q_all[jpat][jq,:]-b_k)+\
+                + .5*np.trace(Ckq_q_all[jpat][jq,:,:].dot(Akq))
+        if np.isnan(Like).any():
+            print sD**2, Like
+        return Like.sum()
+
+    q = xk_q_all[0].shape[0]
+    sD0 = 10**(-3)*np.ones(q+1)
+    step = 10**(-4)*np.ones(q+1)
+    tol = h
+    sD = amoeba_vp(KL_multipat,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
+    return sD**2
+
+def akq_mat(s,dt_k):
+    if s > h/np.min(dt_k):
+        a0 =  2*s/(1-np.exp(-2*s*dt_k))
+        a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
+        a1 = - 2*s*np.exp(-s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
+    else:
+        a0 =  1/dt_k
+        a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
+        a1 = -(1.- s*dt_k[1:])/dt_k[1:]
+    return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
+
+def amoeba_vp(func, x0, args=(),
+              Nit=10**4,
+              a=None,
+              tol_x=10**(-4),
+              tol_f=10**(-4),
+              return_f=False):
     '''Home-made realization of multivariate Nelder-Mead minimum search
 
     Input arguments:
@@ -258,13 +399,14 @@ if __name__=="__main__":
         os.makedirs(outdir_name)
 
 
-    tt_all = []; xk_q_all = []
+    tt_all = []; xk_q_all = []; Ckq_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
     smuD_KLmu_q = np.zeros((len(patient_names),q+2))
     Lq = np.zeros((len(patient_names),q),dtype = 'int')
     xcut = 0.0; xcut_up = 0.
     div = False
     outliers = True
+    gx = None #'sqrt'
     for jpat, pat_name in enumerate(patient_names):
         '''Load data and split it into quantiles'''
         print '\n',pat_name
@@ -319,93 +461,65 @@ if __name__=="__main__":
             Ckq_q[jq,:,:] = Covariance(x_ka)
 
 
-        '''Simultaneous KL fit of fitness coefficients and mutation rates'''
-        smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt)
+        # Simultaneous KL fit of fitness coefficients and mutation rates
+        smuD_KLsim_q[jpat,:] = KLfit_simult_new_sigma(Ckq_q,xk_q,tt,gx =gx)
 
         '''Mutation rates from linear fitting of the upper quantile'''
         smuD_KLmu_q[jpat,q] = fit_upper(xka_q[q-1],tt)
 
         '''KL fitting fitness coefficients for the given mutation rate'''
         ii_sD = range(q+2); ii_sD.remove(q)
-        smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q])
-        xk_q_all.append(xk_q)
+        smuD_KLmu_q[jpat,ii_sD] = KLfit_simult_mu(Ckq_q,xk_q,tt,smuD_KLmu_q[jpat,q],gx = gx)
+        xk_q_all.append(xk_q); Ckq_q_all.append(Ckq_q)
 
-    '''Saving fitness coefficients and mutation rates'''
+    # Simultaneous fit for all patients
+    smuD_KL_q_multipat = KLfit_multipat(Ckq_q_all,xk_q_all,tt_all,gx = gx)
+
+    # Simultaneous fit for all patients given a mutation rate
+    smuD_KL_q_multipat_mu = np.zeros(q+2)
+    smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
+    smuD_KL_q_multipat_mu[ii_sD] = KLfit_multipat_mu(Ckq_q_all,xk_q_all,tt_all,smuD_KL_q_multipat_mu[q],gx = gx)
+
+    # Saving fitness coefficients and mutation rates
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
-    np.savetxt(outdir_name + 'smuD_KL.txt',smuD_KLsim_q,header = '\t\t\t'.join(header))
-    np.savetxt(outdir_name + 'smuD_KLmu.txt',smuD_KLmu_q,header = '\t\t\t'.join(header))
+    if outdir_name is not None:
+        np.savetxt(outdir_name+'smuD_KL.txt', smuD_KLsim_q, header='\t\t\t'.join(header))
+        np.savetxt(outdir_name+'smuD_KLmu.txt', smuD_KLmu_q, header='\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KL_multi.txt',np.array([smuD_KL_q_multipat]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_multi.txt',np.array([smuD_KL_q_multipat_mu]),header = '\t\t\t'.join(header))
 
-    np.savetxt(outdir_name + 'entropy_quantile.txt',Smedians,header = '\t'.join(header[:-2]))
+        qbord = list(Squant[0]['range']) + [Squant[i]['range'][1] for i in xrange(1, len(Squant))]
+        np.savetxt(outdir_name+'smuD_KL_quantiles.txt', qbord)
 
+    '''Bootstrapping'''
+    Nboot = 10**2
+    smuD_boot = np.zeros((Nboot,q+2))
+    smuD_boot_mu = np.zeros((Nboot,q+2))
+    smuD_multipat_boot = np.zeros((Nboot,q+2))
+    smuD_multipat_boot_mu = np.zeros((Nboot,q+2))
+    for jboot in xrange(Nboot):
+        print 'bootstrap #', jboot
+        pp = np.random.randint(0,len(patient_names),len(patient_names))
+        smuD_boot[jboot,:] = smuD_KLsim_q[pp,:].mean(axis=0)
+        smuD_boot_mu[jboot,:] = smuD_KLmu_q[pp,:].mean(axis=0)
+        smuD_multipat_boot[jboot,:] = KLfit_multipat([Ckq_q_all[p] for p in pp],[xk_q_all[p] for p in pp],[tt_all[p] for p in pp],gx = gx)
+        smuD_multipat_boot_mu[jboot,q] = fit_upper_multipat([xk_q_all[p] for p in pp],[tt_all[p] for p in pp])
+        smuD_multipat_boot_mu[jboot,ii_sD] = KLfit_multipat_mu([Ckq_q_all[p] for p in pp],\
+        [xk_q_all[p] for p in pp],[tt_all[p] for p in pp],smuD_multipat_boot_mu[jboot,q],gx = gx)
 
-    '''Plots'''
-    plt.figure(10,figsize=(20,6)); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols[jpat])
-        plt.plot(tt,smuD_KLmu_q[jpat,q]*tt,'-',color = cols[jpat])
-    plt.xlabel('t')
-    plt.ylabel('xk')
-    plt.legend(patient_names,loc=0)
-    plt.title('quantile ' + str(jq+1))
-    plt.savefig(outdir_name + 'upper_quant_linear.pdf')
-    plt.close(10)
-
-
-    data_smu = [smuD_KLsim_q,smuD_KLmu_q]
-    titles = ['KL','KL, mu']
-    ldata = len(data_smu)
-    plt.figure(30,figsize = (8*ldata,18)); plt.clf()
-    for jdata, smu in enumerate(data_smu):
-        plt.subplot(3,ldata,jdata+1)
-        plt.semilogy(range(1,q+1),smu[:,:q].T)
-        plt.xlabel('quantile',fontsize=20)
-        plt.ylabel('s [1/day]',fontsize=20)
-        plt.legend(patient_names,loc=0); plt.ylim([10**(-5),10])
-        plt.title(titles[jdata])
-
-        plt.subplot(3,ldata,jdata+ldata+1)
-        plt.semilogy(smu[:,q],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('mu, [1/day]',fontsize=20)
-
-        plt.subplot(3,ldata,jdata+2*ldata+1)
-        plt.semilogy(smu[:,q+1],':o')
-        plt.xticks(np.arange(len(patient_names)),patient_names)
-        plt.ylabel('D, [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu.pdf')
-    plt.close(30)
+    smuD_boot_mean = smuD_boot.mean(axis=0)
+    smuD_boot_sigma = np.sqrt((smuD_boot**2).mean(axis=0) - smuD_boot.mean(axis=0)**2)
+    smuD_boot_mu_mean = smuD_boot_mu.mean(axis=0)
+    smuD_boot_mu_sigma = np.sqrt((smuD_boot_mu**2).mean(axis=0) - smuD_boot_mu.mean(axis=0)**2)
+    smuD_multipat_boot_mean = smuD_multipat_boot.mean(axis=0)
+    smuD_multipat_boot_sigma = np.sqrt((smuD_multipat_boot**2).mean(axis=0) - smuD_multipat_boot.mean(axis=0)**2)
+    smuD_multipat_boot_mu_mean = smuD_multipat_boot_mu.mean(axis=0)
+    smuD_multipat_boot_mu_sigma = np.sqrt((smuD_multipat_boot_mu**2).mean(axis=0) - smuD_multipat_boot_mu.mean(axis=0)**2)
 
 
-    data_mean = np.array([smu.mean(axis=0) for smu in data_smu])
-    data_sigma = np.array([np.sqrt((smu**2).mean(axis=0) - smu.mean(axis=0)**2) for smu in data_smu])
-    plt.figure(40,figsize = (30,6)); plt.clf()
-    plt.subplot(1,3,1)
-    for jdata, smu in enumerate(data_smu):
-        plt.errorbar(range(1,q+1),np.log10(data_mean[jdata,:q]),yerr = .5*data_sigma[jdata,:q]/data_mean[jdata,:q],fmt = '--o')
-    plt.ylim((-5,0)); plt.xlim([.5,q+.5])
-    plt.xlabel('Entropy quantile',fontsize = 20); plt.ylabel('s [1/days]',fontsize = 20)
-    plt.legend(titles, loc = 0,fontsize = 20)
-    plt.subplot(1,3,2); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q],yerr = data_sigma[:,q]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('mu [1/day]',fontsize=20)
-    plt.subplot(1,3,3); plt.plot()
-    plt.errorbar(range(len(data_smu)),data_mean[:,q+1],yerr = data_sigma[:,q+1]/2,fmt = '--o')
-    plt.xticks(np.arange(len(data_smu)),titles); plt.xlim([-.5,len(data_smu)-.5])
-    plt.xlabel('Method',fontsize=20); plt.ylabel('D [1/day]',fontsize=20)
-    plt.savefig(outdir_name + 'smu_mean.pdf'); plt.close(40)
-
-
-    plt.figure(20,figsize=(20,6*len(tt_all))); plt.clf()
-    for jpat, tt in enumerate(tt_all):
-        plt.subplot(len(tt_all),1,jpat+1)
-        for jq in xrange(q):
-            plt.scatter(tt,xk_q_all[jpat][jq,:],color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLsim_q[jpat,[jq,q]],tt),'-',color = cols_Fabio[jq])
-            plt.plot(tt,curve_smu(smuD_KLmu_q[jpat,[jq,q]],tt),'--',color = cols_Fabio[jq])
-        plt.xlabel('t'); plt.ylabel('xk')
-        plt.legend(titles,loc = 0)
-        plt.title(patient_names[jpat])
-    plt.savefig(outdir_name + 'KL_fit_bypat.pdf'); plt.close(20)
-
+    if outdir_name is not None:
+        np.savetxt(outdir_name + 'smuD_KL_boot.txt',np.array([smuD_boot_mean, smuD_boot_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_boot.txt',np.array([smuD_boot_mu_mean, smuD_boot_mu_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KL_multi_boot.txt',np.array([smuD_multipat_boot_mean, smuD_multipat_boot_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + 'smuD_KLmu_multi_boot.txt',np.array([smuD_multipat_boot_mu_mean, smuD_multipat_boot_mu_sigma]),header = '\t\t\t'.join(header))
