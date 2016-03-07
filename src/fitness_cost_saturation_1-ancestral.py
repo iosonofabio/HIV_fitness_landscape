@@ -149,7 +149,7 @@ def plot_fit(data_to_fit, mu, s):
                )
 
     ax.set_xlabel('days since EDI', fontsize=fs)
-    ax.set_ylabel('Average allele frequency', fontsize=fs)
+    ax.set_ylabel('Average SNP frequency', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
     ax.set_xticks(np.linspace(0, 0.005, 5))
@@ -209,10 +209,10 @@ def plot_fit(data_to_fit, mu, s):
                )
 
     ## include estimates from KL fits
-    x = np.loadtxt('figures/Vadim/entropy_quantile.txt')
-    y = np.median(np.loadtxt('figures/Vadim/smuD_KL.txt')[:,:-2], axis=0)
+    x = np.loadtxt('figures/Vadim/smuD_KL_quantiles.txt')
+    y, dy = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
-    ax.plot(x[1:],y[1:], '-o',lw=2,
+    ax.errorbar(x[1:],y,yerr =dy, marker = 'o',lw=2,
                 color='g',
                 label='KL',
                 markersize=10,
@@ -432,7 +432,7 @@ if __name__ == '__main__':
     perc = np.linspace(0, 100, 8)
     S_bins = np.percentile(data['S'], perc)[1:]
     #S_binc = 0.5 * (S_bins[:-1] + S_bins[1:])
-    S_binc = np.percentile(data['S'], 0.5*(perc[:-1]+perc[1:]))[1:]
+    S_binc = np.percentile(data['S'], 0.5*(perc[:-1]+perc[1:]))[1:] # this makes bin center medians.
     n_alleles = np.array(data.loc[:, ['af', 'S_bin']].groupby('S_bin').count()['af'])
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
@@ -441,10 +441,11 @@ if __name__ == '__main__':
     np.savez(fnS, bins=S_bins, binc=S_binc, n_alleles=n_alleles)
 
     # Simplest model, dump all together no matter what the mutation rate
-    a = fit_fitness_cost_simplest(data, mu=1.19e-5)
+    a = fit_fitness_cost_simplest(data, mu=1.19e-5, plot=False)
     mu = a['mu']
     s = a['s']
     data_to_fit = a['data_to_fit']
+    plot_fit(data_to_fit, mu, s)
 
     def save_plot_data(data):
         '''Save data for plot'''
