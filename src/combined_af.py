@@ -484,6 +484,8 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference, fnam
     return avg_sel_coeff
 
 def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference, ws=30):
+    from util import add_panel_label
+
     all_sel_coeff = []
     fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[6, 1]})
     for ni,label_str in ((0,'synonymous'), (1,'nonsynonymous')):
@@ -524,6 +526,10 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
     ax.set_xlabel('')
     ax.set_ylim(-3, -0.5)
+
+    add_panel_label(axs[0], 'A', x_offset=-0.23)
+    add_panel_label(axs[1], 'B', x_offset=-0.2)
+
     plt.tight_layout()
     plt.savefig('figures/distributions_per_gene.pdf')
 
