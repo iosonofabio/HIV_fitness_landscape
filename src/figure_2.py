@@ -2,7 +2,10 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure for the fitness cost estimate from the saturation curves.
+content:    Make figure 2. This script plots precomputed data, so you have to run it after the following scripts that actually compute the results:
+    - fitness_cost_saturation_1-ancestral.py (sat fit)
+    - fitness_parameter_KLmu.py (KL fit)
+    - combined_af.py (pooled fit)
 '''
 # Modules
 import os
@@ -196,5 +199,3 @@ if __name__ == '__main__':
     data_pooled = load_data_pooled()
 
     plot_fit(data_sat, data_KL, data_pooled)
-
-

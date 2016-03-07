@@ -30,10 +30,29 @@ def load_mutation_rates():
     return pd.read_pickle(fn)
 
 
+def get_mutation_matrix(data):
+    '''Calculate the mutation rate matrix'''
+    d = (data
+         .loc[:, ['af', 'time_binc', 'mut']]
+         .groupby(['mut', 'time_binc'])
+         .mean()
+         .unstack('time_binc')
+         .loc[:, 'af'])
+
+    rates = {}
+    for mut, aft in d.iterrows():
+        times = np.array(aft.index)
+        aft = np.array(aft)
+        rate = np.inner(aft, times) / np.inner(times, times)
+        rates[mut] = rate
+
+    mu = pd.Series(rates)
+    mu.name = 'mutation rate from longitudinal data'
+    return mu
+
+
 def fit_mu_highentropy(data):
     '''An estimate of the high-entropy initial slope is necessary since we exclude sweeps'''
-    from mutation_rate import get_mutation_matrix, plot_comparison
-
     data_mu = data.loc[data['S_binc'] ==  data['S_binc'].max()].copy()
     mu = get_mutation_matrix(data_mu)
     mu.name = 'mutation rate, from high-entropy sites'
