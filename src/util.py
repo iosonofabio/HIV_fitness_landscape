@@ -8,6 +8,13 @@ content:    Utility functions for the HIV fitness landscape project.
 import numpy as np
 
 
+
+# Globals
+fig_width = 5  
+fig_fontsize = 12  
+
+
+
 # Functions
 def add_binned_column(df, bins, to_bin):
     '''Add a column to data frame with binned values (in-place)
@@ -48,3 +55,9 @@ def boot_strap_patients(df, eval_func, columns=None,  n_bootstrap=100):
         replicates.append(eval_func(bs))
     return replicates
 
+
+def add_panel_label(ax, label, x_offset=-0.1):
+    '''Add a label letter to a panel'''
+    ax.text(x_offset, 0.95, label,
+            transform=ax.transAxes,
+            fontsize=fig_fontsize*1.5)

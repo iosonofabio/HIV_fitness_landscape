@@ -114,6 +114,8 @@ def plot_mutation_increase(data, mu=None, axs=None):
         ax.set_ylabel('fraction mutated', fontsize=16)
         ax.tick_params(axis='both', labelsize=18)
         ax.grid(True)
+    axs[0].set_yticklabels(['0.00', '0.01', '0.02', '0.03', '0.04'])
+    axs[1].set_yticklabels(['0.000', '0.002', '0.004', '0.006', '0.008'])
 
     plt.tight_layout()
 
@@ -486,6 +488,11 @@ if __name__ == '__main__':
     #plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
     #plot_mutation_increase(data)
 
+    # Save to file
+    fn = '../data/mutation_rate.pickle'
+    mu_out = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
+    mu_out.to_pickle(fn)
+
     def plot_single_figure(data, mu, dmulog10, muA, dmuAlog10):
         '''Plot figure 1 of the paper'''
         fig, axs = plt.subplots(2, 2, figsize=(12, 10))
@@ -494,9 +501,15 @@ if __name__ == '__main__':
         plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
         plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
 
-    plot_single_figure(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
+        # Add labels
+        from util import add_panel_label
+        add_panel_label(axs[0], 'A', x_offset=-0.2)
+        add_panel_label(axs[1], 'B', x_offset=-0.2)
+        add_panel_label(axs[2], 'C', x_offset=-0.2)
+        add_panel_label(axs[3], 'D', x_offset=-0.2)
 
-    # Save to file
-    fn = '../data/mutation_rate.pickle'
-    mu_out = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
-    mu_out.to_pickle(fn)
+        for ext in ['svg', 'png', 'pdf']:
+            fig.savefig('../figures/figure_1.'+ext)
+
+
+    plot_single_figure(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
