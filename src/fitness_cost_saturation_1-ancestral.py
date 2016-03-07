@@ -98,7 +98,7 @@ def prepare_data_for_fit(data, plot=False):
         d['af_simple'] = d['af'] / d['counter']
         d['af'] = d['af_weighted'] / d['af_weight']
         return d
-    
+
     d = average_data(data)
     if plot:
         plot_bins(d['counter'])
@@ -149,7 +149,7 @@ def plot_fit(data_to_fit, mu, s):
                )
 
     ax.set_xlabel('days since EDI', fontsize=fs)
-    ax.set_ylabel('Average allele frequency', fontsize=fs)
+    ax.set_ylabel('Average SNP frequency', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
     ax.set_xticks(np.linspace(0, 0.005, 5))
@@ -178,19 +178,48 @@ def plot_fit(data_to_fit, mu, s):
                 yerr=dy,
                 lw=2,
                 color='k',
+                label='saturation', marker='o',
+                markersize=10,
                )
 
-    ax.plot([1e-3, s.index[1]],
-            [s['s'].iloc[0], s['s'].iloc[1]],
-            lw=2,
-            ls='--',
-            color='k',
-           )
-    ax.errorbar([1e-3], [s['s'].iloc[0]],
-                yerr=[s['ds'].iloc[0]],
+#    ax.plot([1e-3, s.index[1]],
+#            [s['s'].iloc[0], s['s'].iloc[1]],
+#            lw=2,
+#            ls='--',
+#            color='k',
+#           )
+#    ax.errorbar([1e-3], [s['s'].iloc[0]],
+#                yerr=[s['ds'].iloc[0]],
+#                lw=2,
+#                color='k'
+#               )
+
+    ## include estimates from pooled allele frequency fits
+    with open('data/combined_af_avg_selection_coeff.pkl', 'r') as f:
+        import cPickle as pickle
+        caf_s = pickle.load(f)
+
+    ax.errorbar(caf_s['all'][:,0], caf_s['all'][:,1],
+                yerr=caf_s['all_std'][:,1], marker='o',
                 lw=2,
-                color='k'
+                color='r',
+                label='pooled',
+                markersize=10,
+#                ls='-o'
                )
+
+    ## include estimates from KL fits
+    x = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
+    y, dy = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
+
+    ax.errorbar(x[1:],y,yerr =dy, marker = 'o',lw=2,
+                color='g',
+                label='KL',
+                markersize=10,
+#                ls='-o'
+               )
+
+
 
     # Arrow for the most conserved quantile
     if False:
@@ -217,6 +246,7 @@ def plot_fit(data_to_fit, mu, s):
     ax.yaxis.set_tick_params(labelsize=fs)
 
     plt.tight_layout()
+    plt.legend(loc=3, fontsize=fs)
     plt.ion()
     plt.show()
 
@@ -399,8 +429,10 @@ if __name__ == '__main__':
     data['time_binc'] = t_binc[data['time_bin']]
 
     # No-entropy sites are many, so the bin 0 comes up twice...
-    S_bins = np.percentile(data['S'], np.linspace(0, 100, 8))[1:]
-    S_binc = 0.5 * (S_bins[:-1] + S_bins[1:])
+    perc = np.linspace(0, 100, 8)
+    S_bins = np.percentile(data['S'], perc)[1:]
+    #S_binc = 0.5 * (S_bins[:-1] + S_bins[1:])
+    S_binc = np.percentile(data['S'], 0.5*(perc[:-1]+perc[1:]))[1:] # this makes bin center medians.
     n_alleles = np.array(data.loc[:, ['af', 'S_bin']].groupby('S_bin').count()['af'])
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
@@ -409,10 +441,11 @@ if __name__ == '__main__':
     np.savez(fnS, bins=S_bins, binc=S_binc, n_alleles=n_alleles)
 
     # Simplest model, dump all together no matter what the mutation rate
-    a = fit_fitness_cost_simplest(data, mu=1.19e-5)
+    a = fit_fitness_cost_simplest(data, mu=1.19e-5, plot=False)
     mu = a['mu']
     s = a['s']
     data_to_fit = a['data_to_fit']
+    plot_fit(data_to_fit, mu, s)
 
     def save_plot_data(data):
         '''Save data for plot'''
