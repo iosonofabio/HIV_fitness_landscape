@@ -17,6 +17,8 @@ from combined_af import process_average_allele_frequencies, draw_genome
 fs=16
 ERR_RATE = 2e-3
 WEIGHT_CUTOFF = 500
+SAMPLE_AGE_CUTOFF = 2 # years
+
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette()
 plt.ion()
@@ -154,7 +156,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
         combined_phenos['structural'][patient_to_subtype[:,0]]+= struct[patient_to_subtype[:,1]]
 
         for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
-            if ysi<1:
+            if ysi<SAMPLE_AGE_CUTOFF:
                 continue
             pat_af = af[:,patient_to_subtype[:,1]]
             patient_consensus = pat_af.argmax(axis=0)
@@ -275,7 +277,7 @@ def entropy_scatter(region, within_entropy, associations, reference,
     if fname is not None:
         plt.savefig(fname)
 
-    return enrichment
+    return enrichment, rho, pval
 
 def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname = None):
     '''
@@ -283,7 +285,7 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
     such as disorder scores, solvent accessible area or ddG calcuations. the values come from
     Li et al Retrovirology 2015 and Carlson, personal communication
     '''
-    ind = phenotype!=0
+    ind = (phenotype!=0)&(~np.isnan(within_entropy[region]))
     print(region, phenotype_name)
     print("Pearson:", pearsonr(within_entropy[region][ind], phenotype[ind]))
     rho, pval = spearmanr(within_entropy[region][ind], phenotype[ind])
@@ -302,6 +304,7 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
     if fname is not None:
         plt.savefig(fname)
 
+    return rho,pval
 
 def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa, nbootstraps=0):
     '''
@@ -675,7 +678,7 @@ if __name__=="__main__":
 
     aa_ref='NL4-3'
     global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
-
+    phenotype_correlations = {}
     erich = np.zeros((2,2,2))
     for region in regions:
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
@@ -683,48 +686,57 @@ if __name__=="__main__":
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         if region=='pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates, fname='figures/hinkley_comparison.pdf')
-        erich+=entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
-
+        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
+        phenotype_correlations[(region, 'entropy')] = (rho, pval)
+        erich+=tmp
         for phenotype, vals in data['pheno'][region].iteritems():
             try:
                 print(phenotype)
-                phenotype_scatter(region, combined_entropy, vals, phenotype)
+                rho, pval = phenotype_scatter(region, combined_entropy, vals, phenotype)
+                phenotype_correlations[(region, phenotype)] = (rho, pval)
             except:
                 print("Phenotype scatter failed for:",region, phenotype)
+                phenotype_correlations[(region, phenotype)] = ('NaN', 'NaN')
 
-plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
+    with open("phenotype_correlation.tsv", 'w') as pheno_file:
+        pt = ['entropy']+data['pheno'][regions[0]].keys()
+        pheno_file.write('\t'.join(['gene']+pt)+'\n')
+        for region in regions:
+            pheno_file.write('\t'.join([region]+[str(phenotype_correlations[(region, pheno)][0]) for pheno in pt])+'\n')
 
-export_selection_coefficients(data, total_nonsyn_mutation_rates)
+    plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
 
-sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
+    export_selection_coefficients(data, total_nonsyn_mutation_rates)
 
-
-pval = []
-#for thres in np.arange(1,200,5):
-pheno='structural'
-for thres in np.linspace(0,3,21):
-    KS = selection_coefficients_compare_pheno(pheno, thres, regions, data, total_nonsyn_mutation_rates, plot=False)
-    pval.append((thres, np.log(KS['pol'].pvalue)))
-
-pval = np.array(pval)
-plt.plot(pval[:,0], pval[:,1])
-
-KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions, data, total_nonsyn_mutation_rates, plot =True)
-
-KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions, data, total_nonsyn_mutation_rates, plot=True)
-
-KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions, data, total_nonsyn_mutation_rates, plot =True)
-
-KS_HLA = selection_coefficients_compare_association('HLA', associations, regions, data, total_nonsyn_mutation_rates)
+    sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
 
 
+    pval = []
+    #for thres in np.arange(1,200,5):
+    pheno='structural'
+    for thres in np.linspace(0,3,21):
+        KS = selection_coefficients_compare_pheno(pheno, thres, regions, data, total_nonsyn_mutation_rates, plot=False)
+        pval.append((thres, np.log(KS['pol'].pvalue)))
 
-fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
+    pval = np.array(pval)
+    plt.plot(pval[:,0], pval[:,1])
 
-ws=50
-for ri, region in enumerate(regions):
-    #axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
-    axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], np.convolve(np.ones(ws, dtype=float)/ws, sc[region], mode='same'), c=cols[ri], ls='-')
+    KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions, data, total_nonsyn_mutation_rates, plot =True)
 
-draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
+    KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions, data, total_nonsyn_mutation_rates, plot=True)
+
+    KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions, data, total_nonsyn_mutation_rates, plot =True)
+
+    KS_HLA = selection_coefficients_compare_association('HLA', associations, regions, data, total_nonsyn_mutation_rates)
+
+
+
+    fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
+
+    ws=50
+    for ri, region in enumerate(regions):
+        #axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
+        axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], np.convolve(np.ones(ws, dtype=float)/ws, sc[region], mode='same'), c=cols[ri], ls='-')
+
+    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
