@@ -69,6 +69,7 @@ def load_data_pooled():
 
 def plot_fit(data_sat, data_KL, data_pooled):
     from matplotlib import cm
+    from util import add_panel_label
 
     palette = sns.color_palette('colorblind')
 
@@ -181,6 +182,11 @@ def plot_fit(data_sat, data_KL, data_pooled):
     ax.set_yscale('log')
     ax.xaxis.set_tick_params(labelsize=fs)
     ax.yaxis.set_tick_params(labelsize=fs)
+
+
+    # Panel labels
+    add_panel_label(axs[0], 'A', x_offset=-0.27)
+    add_panel_label(axs[1], 'B', x_offset=-0.21)
 
     plt.tight_layout()
     plt.ion()
