@@ -212,7 +212,7 @@ def plot_fit(data_to_fit, mu, s):
     x = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
     y, dy = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
-    ax.errorbar(x[1:],y,yerr =dy, marker = 'o',lw=2,
+    ax.errorbar(x,y,yerr =dy, marker = 'o',lw=2,
                 color='g',
                 label='KL',
                 markersize=10,
