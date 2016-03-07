@@ -209,7 +209,7 @@ def plot_fit(data_to_fit, mu, s):
                )
 
     ## include estimates from KL fits
-    x = np.loadtxt('figures/Vadim/smuD_KL_quantiles.txt')
+    x = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
     y, dy = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
     ax.errorbar(x[1:],y,yerr =dy, marker = 'o',lw=2,
