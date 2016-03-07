@@ -159,7 +159,7 @@ if __name__ == '__main__':
         data = pd.read_pickle(fn)
 
     # Make time and entropy bins
-    t_bins = np.array([0, 500, 1000, 1500, 2000, 3000], int)
+    t_bins = np.array([0, 100, 300, 800, 1500, 2500, 4000], int)
     t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
@@ -172,21 +172,25 @@ if __name__ == '__main__':
     data['S_binc'] = S_binc[data['S_bin']]
 
     # Average by time bin, syn, and sec structure
-    dav = (data
-           .loc[:, ['time_binc', 'syn', 'protein_secondary_structure', 'af']]
-           .groupby(['time_binc', 'syn', 'protein_secondary_structure'])
-           .mean()
-           .loc[:, 'af']
-           .unstack('time_binc'))
+    #dav = (data
+    #       .loc[:, ['time_binc', 'syn', 'protein_secondary_structure', 'af']]
+    #       .groupby(['time_binc', 'syn', 'protein_secondary_structure'])
+    #       .mean()
+    #       .loc[:, 'af']
+    #       .unstack('time_binc'))
 
-    def average_data(data, additional=[]):
+    def average_data(data, additional=[], include_gp120=False):
         '''Average data
 
         Parameters
            additional (list): other columns to stratify by
         '''
-        dav = (data
-               .copy()
+        data_tmp = data.copy()
+        if not include_gp120:
+            data_tmp = data_tmp.loc[data_tmp['protein'] != 'gp120'].copy()
+            data_tmp = data_tmp.loc[data_tmp['protein'] != 'gp41'].copy()
+
+        dav = (data_tmp
                .loc[:, ['time_binc', 'syn', 'protein_secondary_structure', 'af'] + additional]
                .groupby(['time_binc', 'syn', 'protein_secondary_structure'] + additional)
                .mean()
@@ -195,15 +199,43 @@ if __name__ == '__main__':
               )
         return dav
 
+    dav = average_data(data, include_gp120=False).unstack('time_binc')
+
     # Have a look at the stratified data
+    a = average_data(data, additional=['protein'], include_gp120=True)
     print a.unstack('syn')[False].unstack('protein_secondary_structure')['B'].unstack('protein').loc[:, ['PR', 'IN', 'RT', 'gp120']]
 
 
-    sys.exit()
+    #sys.exit()
+
+    # Statistical tests
+    def make_binary_table(data, additional=[]):
+        criterion = lambda x: (x['protein'] != 'gp120') & (x['time'] > 365 * 2)
+        data = data.loc[criterion(data)].copy()
+        data['protein_secondary_structure'] = (data['protein_secondary_structure'] != 'X')
+        dav = (data
+               .loc[:, ['syn', 'protein_secondary_structure', 'af'] + additional]
+               .groupby(['syn', 'protein_secondary_structure'] + additional)
+               .mean()
+              )
+        dav['#'] = (data
+               .loc[:, ['syn', 'protein_secondary_structure', 'af'] + additional]
+               .groupby(['syn', 'protein_secondary_structure'] + additional)
+               .count()
+               ['af'])
+        dav['std'] = (data
+               .loc[:, ['syn', 'protein_secondary_structure', 'af'] + additional]
+               .groupby(['syn', 'protein_secondary_structure'] + additional)
+               .std()
+               ['af'])
+        dav['sem'] = dav['std'] / dav['#']
+        return dav
+
+    bt = make_binary_table(data)
 
 
     from util import boot_strap_patients
-    reps = pd.concat(boot_strap_patients(data, average_data, n_bootstrap=100),
+    reps = pd.concat(boot_strap_patients(data, average_data, n_bootstrap=10),
                      axis=1)
     reps.columns = np.arange(reps.shape[1]) + 1
 
@@ -228,8 +260,8 @@ if __name__ == '__main__':
                         yerr=yerr,
                         lw=3, ls=lss[syn], color=colors[sec_str],
                         label=d[syn]+', '+labs[sec_str])
-        ax.set_xlim(0, 2600)
-        ax.set_ylim(0, 0.015)
+        ax.set_xlim(0, 3300)
+        ax.set_ylim(5e-5, 0.05)
         ax.legend(loc='upper left', ncol=2, fontsize=fs-1)
         ax.set_xlabel('Days since EDI', fontsize=fs)
         ax.set_ylabel('Allele frequency', fontsize=fs)
@@ -239,3 +271,5 @@ if __name__ == '__main__':
         plt.tight_layout()
         plt.ion()
         plt.show()
+
+    plot_average_frequencies(dav)
