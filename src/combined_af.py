@@ -330,6 +330,8 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
     produce figure of distribution of selection coefficients separately for
     synonymous and nonsynonymous sites.
     '''
+    from util import add_panel_label
+
     if ref is not None:
         if not hasattr(ref, 'fitness_cost'):
             ref.fitness_cost = np.zeros_like(ref.entropy)
@@ -368,6 +370,10 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
         ax.set_xticks([0.001, 0.01, 0.1])
         ax.set_xticklabels([r'$<10^{-3}$', r'$10^{-2}$', r'$>10^{-1}$'])
         ax.legend(loc=2, fontsize=fs*0.8)
+
+        add_panel_label(ax, ['A', 'B', 'C'][ni],
+                        x_offset=-0.1 -0.1 * (ni == 0))
+
     plt.tight_layout()
     if fname is not None:
         plt.savefig(fname)
@@ -380,6 +386,8 @@ def selcoeff_confidence(region, data, fname=None):
     of how variable the estimates are. three such distributions are combined in one
     figure
     '''
+    from util import add_panel_label
+
     (combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs) = \
         process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
     minor_af_array=np.array(minor_af_bs[region])
@@ -407,6 +415,9 @@ def selcoeff_confidence(region, data, fname=None):
     plt.xlabel('selection coefficient', fontsize=fs)
     plt.ylabel('uncertainty distribution', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
+
+    add_panel_label(ax, 'D', x_offset=-0.2)
+
     plt.tight_layout()
     if fname is not None:
         plt.savefig(fname)
