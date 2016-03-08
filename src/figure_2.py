@@ -3,7 +3,7 @@
 author:     Fabio Zanini
 date:       15/06/15
 content:    Make figure 2. This script plots precomputed data, so you have to run it after the following scripts that actually compute the results:
-    - fitness_cost_saturation_1-ancestral.py (sat fit)
+    - fitness_cost_saturation.py (sat fit)
     - fitness_parameter_KLmu.py (KL fit)
     - combined_af.py (pooled fit)
 '''
@@ -38,19 +38,8 @@ def load_data_saturation():
 
 def load_data_KL():
     '''Load data from Vadim's KL approach'''
-    S_quantiles = np.loadtxt('data/smuD_KL_quantiles.txt')
-    S_center = 0.5 * (S_quantiles[:-1] + S_quantiles[1:])
-
-    raw = np.loadtxt('data/smuD_KL.txt')
-    s = raw[:, :-2]
-    
-    # Bootstrap
-    n_repr = 100
-    s_BS = np.array([np.mean([s[i] for i in np.random.randint(s.shape[0], size=s.shape[0])],
-                             axis=0)
-                     for j in xrange(n_repr)])
-    s_mean = s_BS.mean(axis=0)
-    s_std = s_BS.std(axis=0)
+    S_center = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
+    s_mean, s_std = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'

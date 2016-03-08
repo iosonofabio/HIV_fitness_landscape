@@ -26,37 +26,8 @@ from util import add_binned_column, boot_strap_patients
 
 # Functions
 def load_mutation_rates():
-    fn = 'data/mutation_rate.pickle'
+    fn = '../data/mutation_rate.pickle'
     return pd.read_pickle(fn)
-
-
-def get_mutation_matrix(data):
-    '''Calculate the mutation rate matrix'''
-    d = (data
-         .loc[:, ['af', 'time_binc', 'mut']]
-         .groupby(['mut', 'time_binc'])
-         .mean()
-         .unstack('time_binc')
-         .loc[:, 'af'])
-
-    rates = {}
-    for mut, aft in d.iterrows():
-        times = np.array(aft.index)
-        aft = np.array(aft)
-        rate = np.inner(aft, times) / np.inner(times, times)
-        rates[mut] = rate
-
-    mu = pd.Series(rates)
-    mu.name = 'mutation rate from longitudinal data'
-    return mu
-
-
-def fit_mu_highentropy(data):
-    '''An estimate of the high-entropy initial slope is necessary since we exclude sweeps'''
-    data_mu = data.loc[data['S_binc'] ==  data['S_binc'].max()].copy()
-    mu = get_mutation_matrix(data_mu)
-    mu.name = 'mutation rate, from high-entropy sites'
-    return mu
 
 
 def prepare_data_for_fit(data, plot=False):
@@ -201,60 +172,6 @@ def plot_fit(data_to_fit, mu, s):
                 markersize=10,
                )
 
-#    ax.plot([1e-3, s.index[1]],
-#            [s['s'].iloc[0], s['s'].iloc[1]],
-#            lw=2,
-#            ls='--',
-#            color='k',
-#           )
-#    ax.errorbar([1e-3], [s['s'].iloc[0]],
-#                yerr=[s['ds'].iloc[0]],
-#                lw=2,
-#                color='k'
-#               )
-
-    ## include estimates from pooled allele frequency fits
-    with open('data/combined_af_avg_selection_coeff.pkl', 'r') as f:
-        import cPickle as pickle
-        caf_s = pickle.load(f)
-
-    ax.errorbar(caf_s['all'][:,0], caf_s['all'][:,1],
-                yerr=caf_s['all_std'][:,1], marker='o',
-                lw=2,
-                color='r',
-                label='pooled',
-                markersize=10,
-#                ls='-o'
-               )
-
-    ## include estimates from KL fits
-    x = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
-    y, dy = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
-
-    ax.errorbar(x[1:],y,yerr =dy, marker = 'o',lw=2,
-                color='g',
-                label='KL',
-                markersize=10,
-#                ls='-o'
-               )
-
-
-
-    # Arrow for the most conserved quantile
-    if False:
-        ax.annotate('Full conservation',
-                    xy=(1.1e-3, 0.9 * s['s'].iloc[0]),
-                    xytext=(1.1e-3, 0.01 * s['s'].iloc[0]),
-                    arrowprops={'facecolor': 'black',
-                                'width': 1.5,
-                                'headlength': 10,
-                                'shrink': 0.1,
-                               },
-                    ha='left',
-                    va='center',
-                    fontsize=fs,
-                   )
-
     ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
     ax.set_ylabel('Fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 1.1)
@@ -270,7 +187,7 @@ def plot_fit(data_to_fit, mu, s):
     plt.show()
 
 
-def fit_fitness_cost_simplest(data, plot=True, bootstrap=True, mu=None):
+def fit_fitness_cost(data, plot=True, save=True, bootstrap=True, mu=None):
     '''Fit one slope and 6 saturations to ALL data at once'''
     def average_data(data):
         data = data.copy()
@@ -329,16 +246,24 @@ def fit_fitness_cost_simplest(data, plot=True, bootstrap=True, mu=None):
 
         bootstrap_fun()
 
+    output = {'data_to_fit': data_to_fit, 'mu': mu, 's': s}
+
     if plot:
         plot_fit(data_to_fit, mu, s)
 
-    return {'data_to_fit': data_to_fit,
-            'mu': mu,
-            's': s}
+    if save:
+        import cPickle as pickle
+        fn = '../data/fitness_cost_saturation_plot.pickle'
+        with open(fn, 'w') as f:
+            pickle.dump(output, f, -1)
+
+    return output
 
 
 def collect_data(patients, cov_min=100, no_sweeps=False, refname='HXB2'):
     '''Collect data for the fitness cost estimate'''
+    print 'Collect data from patients'
+
     ref = HIVreference(refname=refname, subtype='any', load_alignment=True)
     mus = load_mutation_rates()
     mu = mus.mu
@@ -425,19 +350,26 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Fitness cost')
     parser.add_argument('--regenerate', action='store_true',
-                        help="regenerate data")
-    parser.add_argument('--no-sweeps', action='store_true',
-                        help='Exclude sweeps from the data collection')
+                        help="regenerate data from allele counts")
+    parser.add_argument('--no-sweep-filter', action='store_false',
+                        dest='no_sweeps', default=True,
+                        help='Do not exclude sweeps from the data collection')
     args = parser.parse_args()
 
-    fn = 'data/fitness_cost_data_1-ancestral.pickle'
+    # Intermediate data are saved to file for faster access later on
+    fn = '../data/fitness_cost_data.pickle'
     if args.no_sweeps:
-        fn = fn.split('.')[0]+'_nosweep.pickle'
+        fn = fn[:-7]+'_nosweep.pickle'
     if not os.path.isfile(fn) or args.regenerate:
         patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
         cov_min = 100
         data = collect_data(patients, cov_min=cov_min, no_sweeps=args.no_sweeps)
-        data.to_pickle(fn)
+        try:
+            data.to_pickle(fn)
+            print 'Data saved to file:', os.path.abspath(fn)
+        except IOError:
+            print 'Could not save data to file:', os.path.abspath(fn)
+
     else:
         data = pd.read_pickle(fn)
 
@@ -447,30 +379,17 @@ if __name__ == '__main__':
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
 
-    # No-entropy sites are many, so the bin 0 comes up twice...
+    # No-entropy sites are many, so the bin 0 comes up twice
     perc = np.linspace(0, 100, 8)
     S_bins = np.percentile(data['S'], perc)[1:]
-    #S_binc = 0.5 * (S_bins[:-1] + S_bins[1:])
     S_binc = np.percentile(data['S'], 0.5*(perc[:-1]+perc[1:]))[1:] # this makes bin center medians.
     n_alleles = np.array(data.loc[:, ['af', 'S_bin']].groupby('S_bin').count()['af'])
     add_binned_column(data, S_bins, 'S')
     data['S_binc'] = S_binc[data['S_bin']]
 
-    fnS = fn.split('.')[0]+'_Sbins.npz'
+    # Save entropy bins to file
+    fnS = fn[:-7]+'_Sbins.npz'
     np.savez(fnS, bins=S_bins, binc=S_binc, n_alleles=n_alleles)
 
-    # Simplest model, dump all together no matter what the mutation rate
-    a = fit_fitness_cost_simplest(data, mu=1.19e-5, plot=False)
-    mu = a['mu']
-    s = a['s']
-    data_to_fit = a['data_to_fit']
-    plot_fit(data_to_fit, mu, s)
-
-    def save_plot_data(data):
-        '''Save data for plot'''
-        import cPickle as pickle
-        fn = 'data/fitness_cost_saturation_plot.pickle'
-        with open(fn, 'w') as f:
-            pickle.dump(data, f, -1)
-
-    save_plot_data(a)
+    # Fit costs from saturation
+    fit_fitness_cost(data, mu=1.19e-5, plot=True, save=True)
