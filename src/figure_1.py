@@ -25,6 +25,94 @@ from util import add_binned_column, boot_strap_patients
 
 
 # Functions
+def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
+    '''Get the mutation rate matrix from Abram 2010'''
+    muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
+
+    muAbram = pd.Series(np.zeros(len(muts)), index=muts, dtype=float)
+    muAbram.name = 'mutation rate Abram 2010'
+
+    if strand in ['fwd', 'both']:
+        muAbram['C->A'] += 14
+        muAbram['G->A'] += 146
+        muAbram['T->A'] += 20
+        muAbram['A->C'] += 1
+        muAbram['G->C'] += 2
+        muAbram['T->C'] += 18
+        muAbram['A->G'] += 29
+        muAbram['C->G'] += 0
+        muAbram['T->G'] += 6
+        muAbram['A->T'] += 3
+        muAbram['C->T'] += 81
+        muAbram['G->T'] += 4
+
+    if strand in ['rev', 'both']:
+        muAbram['C->A'] += 24
+        muAbram['G->A'] += 113
+        muAbram['T->A'] += 32
+        muAbram['A->C'] += 1
+        muAbram['G->C'] += 2
+        muAbram['T->C'] += 25
+        muAbram['A->G'] += 13
+        muAbram['C->G'] += 1
+        muAbram['T->G'] += 8
+        muAbram['A->T'] += 0
+        muAbram['C->T'] += 61
+        muAbram['G->T'] += 0
+
+    muAbramAv = 1.3e-5
+    # Assuming an even composition of the lacZ substrate
+    nSitesPerNucleotide = 0.25 * muAbram.sum() / muAbramAv
+
+    if normalize:
+        muAbram1 = muAbram / nSitesPerNucleotide
+    else:
+        muAbram1 = muAbram
+
+    if not with_std:
+        return muAbram1
+    else:
+        std = np.sqrt(muAbram * (1 - muAbram / nSitesPerNucleotide))
+        if normalize:
+            std /= nSitesPerNucleotide
+
+        return {'mu': muAbram1,
+                'std': std}
+
+
+def get_mutation_matrix(data):
+    '''Calculate the mutation rate matrix'''
+    def get_mu(data):
+        d = (data
+             .loc[:, ['af', 'time_binc', 'mut']]
+             .groupby(['mut', 'time_binc'])
+             .mean()
+             .unstack('time_binc')
+             .loc[:, 'af'])
+
+        rates = {}
+        for mut, aft in d.iterrows():
+            times = np.array(aft.index)
+            aft = np.array(aft)
+            rate = np.inner(aft, times) / np.inner(times, times)
+            rates[mut] = rate
+
+        mu = pd.Series(rates)
+        mu.name = 'mutation rate from longitudinal data'
+
+        return mu
+
+    mu = get_mu(data)
+
+    # Bootstrap
+    dmulog10 = mu.copy()
+    muBS = boot_strap_patients(data, get_mu, n_bootstrap=100)
+    for key, _ in dmulog10.iteritems():
+        dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
+
+    return mu, dmulog10
+
+
 def plot_mutation_increase(data, mu=None, axs=None):
     '''Plot accumulation of mutations and fits'''
     cmap = sns.color_palette()
@@ -123,124 +211,8 @@ def plot_mutation_increase(data, mu=None, axs=None):
         plt.savefig('mutation_linear_increase.png')
 
 
-def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
-    '''Get the mutation rate matrix from Abram 2010'''
-    muts = [a+'->'+b for a in alpha[:4] for b in alpha[:4] if a != b]
-
-    muAbram = pd.Series(np.zeros(len(muts)), index=muts, dtype=float)
-    muAbram.name = 'mutation rate Abram 2010'
-
-    if strand in ['fwd', 'both']:
-        muAbram['C->A'] += 14
-        muAbram['G->A'] += 146
-        muAbram['T->A'] += 20
-        muAbram['A->C'] += 1
-        muAbram['G->C'] += 2
-        muAbram['T->C'] += 18
-        muAbram['A->G'] += 29
-        muAbram['C->G'] += 0
-        muAbram['T->G'] += 6
-        muAbram['A->T'] += 3
-        muAbram['C->T'] += 81
-        muAbram['G->T'] += 4
-
-    if strand in ['rev', 'both']:
-        muAbram['C->A'] += 24
-        muAbram['G->A'] += 113
-        muAbram['T->A'] += 32
-        muAbram['A->C'] += 1
-        muAbram['G->C'] += 2
-        muAbram['T->C'] += 25
-        muAbram['A->G'] += 13
-        muAbram['C->G'] += 1
-        muAbram['T->G'] += 8
-        muAbram['A->T'] += 0
-        muAbram['C->T'] += 61
-        muAbram['G->T'] += 0
-
-    muAbramAv = 1.3e-5
-    # Assuming an even composition of the lacZ substrate
-    nSitesPerNucleotide = 0.25 * muAbram.sum() / muAbramAv
-
-    if normalize:
-        muAbram1 = muAbram / nSitesPerNucleotide
-    else:
-        muAbram1 = muAbram
-
-    if not with_std:
-        return muAbram1
-    else:
-        std = np.sqrt(muAbram * (1 - muAbram / nSitesPerNucleotide))
-        if normalize:
-            std /= nSitesPerNucleotide
-
-        return {'mu': muAbram1,
-                'std': std}
-
-
-def get_mutation_matrix(data):
-    '''Calculate the mutation rate matrix'''
-    d = (data
-         .loc[:, ['af', 'time_binc', 'mut']]
-         .groupby(['mut', 'time_binc'])
-         .mean()
-         .unstack('time_binc')
-         .loc[:, 'af'])
-
-    rates = {}
-    for mut, aft in d.iterrows():
-        times = np.array(aft.index)
-        aft = np.array(aft)
-        rate = np.inner(aft, times) / np.inner(times, times)
-        rates[mut] = rate
-
-    mu = pd.Series(rates)
-    mu.name = 'mutation rate from longitudinal data'
-    return mu
-
-
-def get_mutation_matrix_per_sample(data, plot=False):
-    '''Calculate the mutation rate matrix'''
-    aft_by_mut_pat = defaultdict(dict)
-    for pcode in patients:
-        d2 = (data
-             .loc[data.loc[:,'pcode']==pcode, ['af', 'time', 'mut']]
-             .groupby(['mut', 'time'])
-             .mean()
-             .unstack('time')
-             .loc[:, 'af'])
-        for mut, aft in d2.iterrows():
-            times = np.array(aft.index)
-            aft = np.array(aft)
-            aft_by_mut_pat[mut][pcode]= (times, aft)
-
-    rates = {}
-    for mut, samples in aft_by_mut_pat.iteritems():
-        times = []
-        aft = []
-        if plot:
-            plt.figure()
-        for pcode in patients:
-            (t,nu) = samples[pcode]
-            aft.extend(nu)
-            times.extend(t)
-            if plot:
-                plt.plot(t,nu, 'o', label=pcode)
-        aft = np.array(aft)
-        times = np.array(times)
-        rate = np.inner(aft, times) / np.inner(times, times)
-        if plot:
-            plt.plot(times,rate*times, '-')
-            plt.title(mut+': '+str(rate))
-            plt.legend(loc=2, ncol=2)
-        rates[mut] = rate
-
-    mu = pd.Series(rates)
-    mu.name = 'mutation rate from longitudinal data'
-    return mu
-
-
 def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False, ax=None):
+    '''Plot mutation rate matrix'''
     from matplotlib import cm
     sns.set_style('dark')
 
@@ -371,8 +343,30 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
     return ax
 
 
+def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
+    '''Plot figure 1 of the paper'''
+    print 'Plot Figure 1'''
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+    axs = axs.ravel()
+    plot_mutation_increase(data, mu=mu, axs=axs[:2])
+    plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
+    plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
+
+    # Add labels
+    from util import add_panel_label
+    add_panel_label(axs[0], 'A', x_offset=-0.2)
+    add_panel_label(axs[1], 'B', x_offset=-0.2)
+    add_panel_label(axs[2], 'C', x_offset=-0.2)
+    add_panel_label(axs[3], 'D', x_offset=-0.2)
+
+    for ext in ['svg', 'png', 'pdf']:
+        fig.savefig('../figures/figure_1.'+ext)
+
+
 def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
     '''Collect data for the mutation rate estimate'''
+    print 'Collect data from patients'
+
     ref = HIVreference(refname=refname, load_alignment=True, subtype=subtype)
 
     data = []
@@ -453,15 +447,19 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Mutation rate')
     parser.add_argument('--regenerate', action='store_true',
-                        help="regenerate data")
+                        help="regenerate data from allele counts")
     args = parser.parse_args()
 
+    # Intermediate data are saved to file for faster access later on
     fn = '../data/mutation_rate_data.pickle'
     patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
     if not os.path.isfile(fn) or args.regenerate:
-        cov_min = 100
-        data = collect_data(patients, cov_min=cov_min)
-        data.to_pickle(fn)
+        data = collect_data(patients)
+        try:
+            data.to_pickle(fn)
+            print 'Data saved to file:', os.path.abspath(fn)
+        except IOError:
+            print 'Could not save data to file:', os.path.abspath(fn)
     else:
         data = pd.read_pickle(fn)
 
@@ -471,45 +469,18 @@ if __name__ == '__main__':
     add_binned_column(data, t_bins, 'time')
     data['time_binc'] = t_binc[data['time_bin']]
 
-    mu = get_mutation_matrix(data)
-    dmulog10 = mu.copy()
-    muBS = boot_strap_patients(data, get_mutation_matrix, n_bootstrap=100)
-    for key, _ in dmulog10.iteritems():
-        dmulog10[key] = np.std([np.log10(tmp[key]) for tmp in muBS])
-
-    #plot_mutation_rate_matrix(mu, dmulog10=dmulog10)
+    # Get mutation rate with bootstrap error bars
+    mu,dmulog10 = get_mutation_matrix(data)
 
     # Compare to Abram et al 2010
     tmp = get_mu_Abram2010(with_std=True)
     muA = tmp['mu']
     dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
-    #plot_mutation_rate_matrix(muA, dmulog10=dmuAlog10)
 
-    #plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10)
-    #plot_mutation_increase(data)
-
-    # Save to file
+    # Save results to file (used in Figure 2)
     fn = '../data/mutation_rate.pickle'
     mu_out = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
     mu_out.to_pickle(fn)
 
-    def plot_single_figure(data, mu, dmulog10, muA, dmuAlog10):
-        '''Plot figure 1 of the paper'''
-        fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-        axs = axs.ravel()
-        plot_mutation_increase(data, mu=mu, axs=axs[:2])
-        plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
-        plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
-
-        # Add labels
-        from util import add_panel_label
-        add_panel_label(axs[0], 'A', x_offset=-0.2)
-        add_panel_label(axs[1], 'B', x_offset=-0.2)
-        add_panel_label(axs[2], 'C', x_offset=-0.2)
-        add_panel_label(axs[3], 'D', x_offset=-0.2)
-
-        for ext in ['svg', 'png', 'pdf']:
-            fig.savefig('../figures/figure_1.'+ext)
-
-
-    plot_single_figure(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
+    # Plot Figure 1
+    plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
