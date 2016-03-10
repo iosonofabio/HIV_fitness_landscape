@@ -34,7 +34,7 @@ def Covariance(p_ka):
     return (p_ka - np.tile(pmean_k,(L,1)).T).dot(p_ka.T - np.tile(pmean_k,(L,1)))/(L-1)
 
 
-def fit_upper(xka,t_k):
+def fit_upper(xka, t_k):
     '''Fitting the quantile data with a linear law'''
     def fit_upper_MLS(mu):
         chi2 = np.zeros(xk_q.shape)
@@ -45,9 +45,9 @@ def fit_upper(xka,t_k):
     return res.x
 
 
-# Kullback-Leibler fitting
-def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
+def KLfit_simult_new_sigma(Ckqa, pmean_ka, t_k, Lq=None, sigma=None, gx=None):
     '''Simultaneous KL divergence minimization for several quantiles'''
+
     def Kkq_gauss(s,D0):
         '''Covariance matrix for Gaussian model
         Parameters:
@@ -63,7 +63,7 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
-    def Kkq_sqrt(s,mu,D0):
+    def Kkq_sqrt(s, mu, D0):
         '''Covariance matrix for square-root model
         Parameters:
            - s: fitness parameter
@@ -81,8 +81,11 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
 
     def KL_simult(smuD):
         '''Kullback-Leibler divergence for several quantiles
-        smuD - array with the square roots of the values of fitness parameters,
-        mutation rate and the diffusion coefficient'''
+        Parameters:
+           - smuD: array with the square roots of the values of fitness parameters,
+           mutation rate and the diffusion coefficient
+        '''
+
         mu = smuD[q]**2; D0 = smuD[q+1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
@@ -118,12 +121,16 @@ def KLfit_simult_new_sigma(Ckqa,pmean_ka,t_k,Lq = None,sigma = None,gx = None):
     return smuD**2
 
 
-def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
+def KLfit_simult_mu(Ckqa, pmean_ka, t_k, mu, Lq=None, sigma=None, gx=None):
     '''Simultaneous KL divergence minimization for quantiles for a fixed mutation rate'''
-    def Kkq_gauss(s,D0):
+
+    def Kkq_gauss(s, D0):
         '''Covariance matrix for Gaussian model
-        s - fitness parameter
-        D0 - diffusion coefficient'''
+        Parameters:
+           - s: fitness parameter
+           - D0: diffusion coefficient
+        '''
+
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -132,11 +139,14 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
-    def Kkq_sqrt(s,mu,D0):
+    def Kkq_sqrt(s, mu, D0):
         '''Covariance matrix for square-root model
-        s - fitness parameter
-        mu-mutation rate
-        D0 - diffusion coefficient'''
+        Parameters:
+           - s: fitness parameter
+           - mu: mutation rate
+           - D0: diffusion coefficient
+        '''
+
         t_kq = np.tile(t_k,(t_k.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
         tmin_kq = (t_kq + t_kq.T -dt_kq)/2
@@ -147,8 +157,11 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
 
     def KL_simult(sD):
         '''Kullback-Leibler divergence for several quantiles
-        smuD - array with the square roots of the values of fitness parameters,
-        mutation rate and the diffusion coefficient'''
+        Parameters:
+           - smuD: array with the square roots of the values of fitness parameters,
+        mutation rate and the diffusion coefficient
+        '''
+
         D0 = sD[-1]**2
         Like = np.zeros(q)
         for jq in xrange(q):
@@ -186,9 +199,11 @@ def KLfit_simult_mu(Ckqa,pmean_ka,t_k,mu,Lq = None,sigma = None,gx = None):
     sD = amoeba_vp(KL_simult,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
     return sD**2
 
-def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
+
+def KLfit_multipat(Ckq_q_all, xk_q_all, tk_all,gx=None):
     '''Simultaneous KL divergence minimization for several quantiles'''
-    def Kkq_gauss(s,D0,tk):
+
+    def Kkq_gauss(s, D0, tk):
         '''Correlation matrix'''
         t_kq = np.tile(tk,(tk.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
@@ -198,7 +213,7 @@ def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
-    def Kkq_sqrt(s,mu,D0,tk):
+    def Kkq_sqrt(s, mu, D0, tk):
         '''Correlation matrix'''
         t_kq = np.tile(tk,(tk.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
@@ -209,6 +224,7 @@ def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
             return np.exp(-s*dt_kq)*(tmin_kq - .5*s*tmin_kq**2)**2*mu*D0/2
 
     def KL_multipat(smuD):
+        #FIXME: please document
         mu = smuD[q]**2; D0 = smuD[q+1]**2; ss = smuD[:q]**2
         Like = np.zeros((len(tk_all),q))
         for jpat, tk in enumerate(tk_all):
@@ -239,22 +255,27 @@ def KLfit_multipat(Ckq_q_all,xk_q_all,tk_all,gx = None):
     smuD = amoeba_vp(KL_multipat,smuD0,args=(),a = step,tol_x = tol,tol_f = tol)
     return smuD**2
 
-def fit_upper_multipat(xk_q_all,tk_all,LL = None):
+
+def fit_upper_multipat(xk_q_all, tk_all, LL=None):
     '''Fitting the quantile data with a linear law'''
+
     def fit_upper_chi2(mu):
         chi2 = np.zeros(len(tk_all))
         for jpat, tk in enumerate(tk_all):
             #chi2[jpat] = np.zeros(xk_q.shape)
             chi2[jpat] = ((xk_q_all[jpat][-1,:] - mu*tk)**2).sum()
         return LL.dot(chi2)
+
     if LL is None:
         LL = np.ones(len(tk_all))
     res = optimize.minimize_scalar(fit_upper_chi2)
     return res.x
 
-def KLfit_multipat_mu(Ckq_q_all,xk_q_all,tk_all,mu,gx = None):
+
+def KLfit_multipat_mu(Ckq_q_all, xk_q_all, tk_all, mu, gx=None):
     '''Simultaneous KL divergence minimization for several quantiles'''
-    def Kkq_gauss(s,D0,tk):
+
+    def Kkq_gauss(s, D0, tk):
         '''Correlation matrix'''
         t_kq = np.tile(tk,(tk.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
@@ -264,7 +285,7 @@ def KLfit_multipat_mu(Ckq_q_all,xk_q_all,tk_all,mu,gx = None):
         else:
             return np.exp(-s*dt_kq)*(2*tmin_kq - 2*s*tmin_kq**2)*D0/2
 
-    def Kkq_sqrt(s,mu,D0,tk):
+    def Kkq_sqrt(s, mu, D0, tk):
         '''Correlation matrix'''
         t_kq = np.tile(tk,(tk.shape[0],1))
         dt_kq = np.abs(t_kq - t_kq.T)
@@ -305,7 +326,8 @@ def KLfit_multipat_mu(Ckq_q_all,xk_q_all,tk_all,mu,gx = None):
     sD = amoeba_vp(KL_multipat,sD0,args=(),a = step,tol_x = tol,tol_f = tol)
     return sD**2
 
-def akq_mat(s,dt_k):
+
+def akq_mat(s, dt_k):
     if s > h/np.min(dt_k):
         a0 =  2*s/(1-np.exp(-2*s*dt_k))
         a0[:-1] += 2*s*np.exp(-2*s*dt_k[1:])/(1-np.exp(-2*s*dt_k[1:]))
@@ -315,6 +337,7 @@ def akq_mat(s,dt_k):
         a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
         a1 = -(1.- s*dt_k[1:])/dt_k[1:]
     return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
+
 
 def amoeba_vp(func, x0, args=(),
               Nit=10**4,
