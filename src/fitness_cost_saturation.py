@@ -5,6 +5,7 @@ date:       15/06/15
 content:    Make figure for the fitness cost estimate from the saturation curves.
 '''
 # Modules
+from __future__ import print_function
 import os
 import sys
 import argparse
@@ -262,7 +263,7 @@ def fit_fitness_cost(data, plot=True, save=True, bootstrap=True, mu=None):
 
 def collect_data(patients, cov_min=100, no_sweeps=False, refname='HXB2'):
     '''Collect data for the fitness cost estimate'''
-    print 'Collect data from patients'
+    print('Collect data from patients')
 
     ref = HIVreference(refname=refname, subtype='any', load_alignment=True)
     mus = load_mutation_rates()
@@ -271,7 +272,7 @@ def collect_data(patients, cov_min=100, no_sweeps=False, refname='HXB2'):
 
     data = []
     for pi, pcode in enumerate(patients):
-        print pcode
+        print(pcode)
 
         p = Patient.load(pcode)
         comap = (pd.DataFrame(p.map_to_external_reference('genomewide', refname=refname)[:, :2],
@@ -366,9 +367,9 @@ if __name__ == '__main__':
         data = collect_data(patients, cov_min=cov_min, no_sweeps=args.no_sweeps)
         try:
             data.to_pickle(fn)
-            print 'Data saved to file:', os.path.abspath(fn)
+            print('Data saved to file:', os.path.abspath(fn))
         except IOError:
-            print 'Could not save data to file:', os.path.abspath(fn)
+            print('Could not save data to file:', os.path.abspath(fn))
 
     else:
         data = pd.read_pickle(fn)

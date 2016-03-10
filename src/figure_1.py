@@ -5,6 +5,7 @@ date:       15/06/15
 content:    Make figure for the mutation rate.
 '''
 # Modules
+from __future__ import print_function
 import os
 import sys
 import argparse
@@ -345,7 +346,7 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
 
 def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
     '''Plot figure 1 of the paper'''
-    print 'Plot Figure 1'''
+    print('Plot Figure 1')
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
     axs = axs.ravel()
     plot_mutation_increase(data, mu=mu, axs=axs[:2])
@@ -365,13 +366,13 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
 
 def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
     '''Collect data for the mutation rate estimate'''
-    print 'Collect data from patients'
+    print('Collect data from patients')
 
     ref = HIVreference(refname=refname, load_alignment=True, subtype=subtype)
 
     data = []
     for pi, pcode in enumerate(patients):
-        print pcode
+        print(pcode)
 
         p = Patient.load(pcode)
         comap = (pd.DataFrame(p.map_to_external_reference('genomewide')[:, :2],
@@ -457,9 +458,9 @@ if __name__ == '__main__':
         data = collect_data(patients)
         try:
             data.to_pickle(fn)
-            print 'Data saved to file:', os.path.abspath(fn)
+            print('Data saved to file:', os.path.abspath(fn))
         except IOError:
-            print 'Could not save data to file:', os.path.abspath(fn)
+            print('Could not save data to file:', os.path.abspath(fn))
     else:
         data = pd.read_pickle(fn)
 
