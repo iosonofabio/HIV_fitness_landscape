@@ -182,7 +182,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
             aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, error_rate = ERR_RATE, type='nuc')
 
             # get patient to subtype map
-            patient_to_subtype = p.map_to_external_reference(region, refname = reference.refname)
+            patient_to_subtype = p.map_to_external_reference(region, refname=reference.refname)
             consensus = reference.get_consensus_indices_in_patient_region(patient_to_subtype)
             ref_ungapped = good_pos_in_reference[patient_to_subtype[:,0]]
 
@@ -213,6 +213,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
 def process_average_allele_frequencies(data, regions,
                                        nbootstraps=0,
                                        bootstrap_type='bootstrap',
+                                       synnonsyn=False,
                                        nstates=4):
     '''
     calculate the entropies, minor frequencies etc from the individual patient averages
@@ -250,10 +251,27 @@ def process_average_allele_frequencies(data, regions,
                         tmp_af = af_average(a)
                         combined_entropy_part[region].append((-np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0))
                         minor_af_part[region].append((tmp_af[:nstates,:].sum(axis=0) - tmp_af.max(axis=0))/(tmp_af[:nstates,:].sum(axis=0)+1e-6))
+
+    output = {'combined_af': combined_af,
+              'combined_entropy': combined_entropy,
+              'minor_af': minor_af,
+             }
+
+    if synnonsyn:
+        # if a site is syn in greater than half the number of patients, call as syn (factor 2 on LHS)
+        synnonsyn = {region: 2*np.array([x for x in data['syn_by_pat'][region].values()]).sum(axis=0)>len(data['syn_by_pat'][region])
+                     for region in regions}
+        # repeat for syn score that does not account for overlapping reading frames
+        synnonsyn_unconstrained = {region: 2*np.array([x for x in data['syn_by_pat_uc'][region].values()]).sum(axis=0)>len(data['syn_by_pat_uc'][region])
+                     for region in regions}
+        output['synnonsyn'] = synnonsyn
+        output['synnonsyn_unconstrained'] = synnonsyn_unconstrained
+
     if nbootstraps:
-        return combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs
-    else:
-        return combined_af, combined_entropy, minor_af
+        output['combined_entropy_bs'] = combined_entropy_bs
+        output['minor_af_bs'] = minor_af_bs
+
+    return output
 
 
 def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None, running_avg=True):
@@ -387,8 +405,13 @@ def selcoeff_confidence(region, data, fname=None):
     '''
     from util import add_panel_label
 
-    (combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs) = \
-        process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
+    av = process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
+    combined_af = av['combined_af']
+    combined_entropy = av['combined_entropy']
+    minor_af = av['minor_af']
+    combined_entropy_bs = av['combined_entropy_bs']
+    minor_af_bs = av['minor_af_bs']
+
     minor_af_array=np.array(minor_af_bs[region])
     qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
     scb = (data['mut_rate'][region]/(af_cutoff+qtiles)).T
@@ -423,7 +446,8 @@ def selcoeff_confidence(region, data, fname=None):
 
 
 def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
-                        fname=None,
+                        figname=None,
+                        dataname=None,
                         smoothing='harmonic'):
     fig, ax = plt.subplots()
     npoints=20
@@ -478,8 +502,12 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
     ax.set_xlabel('Variability in group M [bits]')
 
     plt.tight_layout()
-    if fname is not None:
-        plt.savefig(fname)
+    if figname is not None:
+        plt.savefig(figname)
+
+    if dataname is not None:
+        with open(dataname, 'w') as ofile:
+            cPickle.dump(avg_sel_coeff, ofile)
 
     return avg_sel_coeff
 
@@ -556,6 +584,18 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     add_panel_label(ax, 'B', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
         fig.savefig('../figures/distributions_per_gene.'+ext)
+
+
+def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af):
+    '''Enrichment of nonsynonymous mutations at globally variable but intrapatient conserved sites'''
+    from scipy.stats import fisher_exact
+    E = np.zeros((2,2,2))
+    for region in regions:
+        E += entropy_scatter(region, combined_entropy, synnonsyn, reference,
+                             '../figures/'+region+'_entropy_scatter.png')
+        fraction_diverse(region, minor_af, synnonsyn,
+                         '../figures/'+region+'_minor_allele_frequency.pdf')
+    print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
 
 
 def export_selection_coefficients(data, minor_af, synnonsyn):
@@ -654,28 +694,25 @@ if __name__=="__main__":
         print("data loading failed or data doesn't match specified regions:",
               regions, ' got:',data['mut_rate'].keys())
 
-    combined_af, combined_entropy, minor_af = process_average_allele_frequencies(data, regions, nbootstraps=0)
-
-    # if a site is syn in greater than half the number of patients, call as syn (factor 2 on LHS)
-    synnonsyn = {region: 2*np.array([x for x in data['syn_by_pat'][region].values()]).sum(axis=0)>len(data['syn_by_pat'][region])
-                 for region in regions}
-    # repeat for syn score that does not account for overlapping reading frames
-    synnonsyn_unconstrained = {region: 2*np.array([x for x in data['syn_by_pat_uc'][region].values()]).sum(axis=0)>len(data['syn_by_pat_uc'][region])
-                 for region in regions}
-
+    # Average, annotate, and process allele frequencies
+    av = process_average_allele_frequencies(data, regions, nbootstraps=0, synnonsyn=True)
+    combined_af = av['combined_af']
+    combined_entropy = av['combined_entropy']
+    minor_af = av['minor_af']
+    synnonsyn = av['synnonsyn']
+    synnonsyn_unconstrained = av['synnonsyn_unconstrained']
 
     # Enrichment of nonsynonymous mutations at globally variable but intrapatient conserved sites
-    from scipy.stats import fisher_exact
-    E = np.zeros((2,2,2))
-    for region in regions:
-        E += entropy_scatter(region, combined_entropy, synnonsyn, reference,
-                             '../figures/'+region+'_entropy_scatter.png')
-        fraction_diverse(region, minor_af, synnonsyn,
-                         '../figures/'+region+'_minor_allele_frequency.pdf')
-    print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
+    enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af)
 
+    # Prepare data for Figure 2 (see figure_2.py for the plot)
+    selcoeff_vs_entropy(regions,  minor_af, synnonsyn, data['mut_rate'],
+                        reference,
+                        figname='../figures/'+region+'_sel_coeff_scatter.png',
+                        dataname='../data/combined_af_avg_selection_coeff.pkl',
+                        smoothing='harmonic')
 
-    # Distribution of selection coefficient estimates
+    # Figure 3
     for region in regions:
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'],
@@ -687,13 +724,5 @@ if __name__=="__main__":
                           data['mut_rate'],
                           '../figures/all_sel_coeff.png')
 
-    avg_sel_coeff = selcoeff_vs_entropy(regions,  minor_af, synnonsyn,data['mut_rate'],
-                                        reference,
-                                        fname='../figures/'+region+'_sel_coeff_scatter.png',
-                                        smoothing='harmonic')
-
-    # Save results to file (for Figure 2 et al)
-    with open('../data/combined_af_avg_selection_coeff.pkl', 'w') as ofile:
-        cPickle.dump(avg_sel_coeff, ofile)
-
+    # Figure 4
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
