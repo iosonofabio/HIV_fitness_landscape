@@ -35,7 +35,7 @@ SAMPLE_AGE_CUTOFF = 2 # years
 af_cutoff = 1e-5
 sns.set_style('darkgrid')
 ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
-cols = sns.color_palette()
+cols = sns.color_palette(n_colors=7)
 fs = 16
 regions = ['gag', 'pol', 'vif', 'vpr', 'vpu', 'env', 'nef']
 
@@ -352,11 +352,13 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
     if ref is not None:
         if not hasattr(ref, 'fitness_cost'):
             ref.fitness_cost = np.zeros_like(ref.entropy)
-    fig, axs = plt.subplots(1,3,sharey=True, figsize=(10,6))
+    fig, axs = plt.subplots(1, 3, sharey=True, figsize=(10,6))
     #plt.title(region+' selection coefficients')
     if type(regions)==str:
         regions = [regions]
-    for ni,ax,label_str in ((0,axs[0], 'synonymous'), (1,axs[1], 'syn-overlaps'),  (2,axs[2], 'nonsyn')):
+    for ni,ax,label_str in ((0, axs[0], 'synonymous'),
+                            (1, axs[1], 'syn-overlaps'),
+                            (2, axs[2], 'nonsyn')):
         slist = []
         for region in regions:
             if label_str=='synonymous':
@@ -389,11 +391,12 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
         ax.legend(loc=2, fontsize=fs*0.8)
 
         add_panel_label(ax, ['A', 'B', 'C'][ni],
-                        x_offset=-0.1 -0.1 * (ni == 0))
+                        x_offset=-0.2 - 0.1 * (ni == 0))
 
     plt.tight_layout()
     if fname is not None:
-        plt.savefig(fname)
+        for ext in ['png', 'svg', 'pdf']:
+            plt.savefig(fname+'.'+ext)
 
 
 def selcoeff_confidence(region, data, fname=None):
@@ -430,19 +433,20 @@ def selcoeff_confidence(region, data, fname=None):
         npoints = ind.sum()*sel_coeff_array.shape[0]
         #plt.hist(scb[ind,1], weights = np.ones(ind.sum(),dtype=float)/ind.sum(),
         #        bins=np.logspace(-3,-1,21), alpha=0.3, color=cols[i])
-        ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i], lw=4)
+        ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
         ax.hist(sel_coeff_array[:,ind].flatten(), weights =np.ones(npoints,dtype=float)/npoints,
-                bins=np.logspace(-3,-1,21), alpha=0.7, color=cols[i])
+                bins=np.logspace(-3,-1,21), alpha=0.7, color=cols[i+3])
     ax.set_xscale('log')
     ax.set_xlabel('selection coefficient', fontsize=fs)
     ax.set_ylabel('uncertainty distribution', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
 
-    add_panel_label(ax, 'D', x_offset=-0.2)
-
     plt.tight_layout()
+    add_panel_label(ax, 'D', x_offset=-0.1)
+
     if fname is not None:
-        plt.savefig(fname)
+        for ext in ['png', 'svg', 'pdf']:
+            plt.savefig(fname+'.'+ext)
 
 
 def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
@@ -716,13 +720,13 @@ if __name__=="__main__":
     for region in regions:
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'],
-                              '../figures/'+region+'_sel_coeff.png', ref=reference)
+                              '../figures/'+region+'_sel_coeff', ref=reference)
         selcoeff_confidence(region, data,
-                            '../figures/'+region+'_sel_coeff_confidence.png')
+                            '../figures/'+region+'_sel_coeff_confidence')
 
     selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
                           data['mut_rate'],
-                          '../figures/all_sel_coeff.png')
+                          '../figures/all_sel_coeff')
 
     # Figure 4
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
