@@ -2,10 +2,11 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure 2. This script plots precomputed data, so you have to run it after the following scripts that actually compute the results:
-    - fitness_cost_saturation.py (sat fit)
-    - fitness_parameter_KLmu.py (KL fit)
-    - combined_af.py (pooled fit)
+content:    Make figure 2. This script plots precomputed data, so you have to run
+            it after the following scripts that actually compute the results:
+               - fitness_cost_saturation.py (sat fit)
+               - fitness_cost_KL.py (KL fit)
+               - combined_af.py (pooled fit)
 '''
 # Modules
 import os
