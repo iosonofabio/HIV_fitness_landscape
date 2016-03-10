@@ -17,10 +17,13 @@ import matplotlib.pyplot as plt
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 
+
+
 # Globals
 h = 10**(-8)
 cols_Fabio = ['b','c','g','y','r','m']
 cols = ['b','g','r','c','m','y','k','b','g','r']
+output_folder = '../data/'
 
 
 
@@ -404,8 +407,6 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Fitness cost')
     parser.add_argument('--quantiles', type=int, default=6,
                         help="Number of quantiles")
-    parser.add_argument('--output-folder', default=None,
-                        help='Save everything into a folder')
     args = parser.parse_args()
 
 
@@ -415,12 +416,8 @@ if __name__=="__main__":
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
 
+    # Input arguments
     q = args.quantiles
-
-    if args.output_folder is not None:
-        outdir_name = args.output_folder
-        if not os.path.exists(outdir_name):
-            os.makedirs(outdir_name)
 
     tt_all = []; xk_q_all = []; Ckq_q_all = []
     smuD_KLsim_q = np.zeros((len(patient_names),q+2))
@@ -517,7 +514,7 @@ if __name__=="__main__":
         np.savetxt(outdir_name+'smuD_KL_quantiles.txt', qbord)
         np.savetxt(outdir_name+'smuD_KL_quant_medians.txt', Smedians)
 
-    '''Bootstrapping'''
+    # Bootstrapping
     Nboot = 10**2
     smuD_boot = np.zeros((Nboot,q+2))
     smuD_boot_mu = np.zeros((Nboot,q+2))
