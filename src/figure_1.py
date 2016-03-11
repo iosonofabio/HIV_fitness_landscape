@@ -347,18 +347,22 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
 def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
     '''Plot figure 1 of the paper'''
     print('Plot Figure 1')
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    axs = axs.ravel()
-    plot_mutation_increase(data, mu=mu, axs=axs[:2])
-    plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
-    plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
+    from figure_S1 import plot_mutation_rate as plot_mutation_rate_graph
+    fig = plt.figure(figsize=(12, 11))
+    ax1 = plt.subplot2grid((2,2), (0,0))
+    ax2 = plt.subplot2grid((2,2), (0,1))
+    ax3 = plt.subplot2grid((2,2), (1, 0), colspan=2)
+    plot_mutation_increase(data, mu=mu, axs=[ax1, ax2])
+    #plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
+    plot_mutation_rate_graph(mu, ax=ax3)
+    #plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
 
     # Add labels
     from util import add_panel_label
-    add_panel_label(axs[0], 'A', x_offset=-0.2)
-    add_panel_label(axs[1], 'B', x_offset=-0.2)
-    add_panel_label(axs[2], 'C', x_offset=-0.2)
-    add_panel_label(axs[3], 'D', x_offset=-0.2)
+    add_panel_label(ax1, 'A', x_offset=-0.2)
+    add_panel_label(ax2, 'B', x_offset=-0.2)
+    add_panel_label(ax3, 'C', x_offset=-0.08)
+    #add_panel_label(axs[3], 'D', x_offset=-0.2)
 
     for ext in ['svg', 'png', 'pdf']:
         fig.savefig('../figures/figure_1.'+ext)

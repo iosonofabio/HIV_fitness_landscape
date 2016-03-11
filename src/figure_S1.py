@@ -22,7 +22,7 @@ from hivevo.sequence import alpha, alphal
 
 from util import add_binned_column, boot_strap_patients
 
-
+fs=18
 
 # Functions
 def load_mutation_rate():
@@ -30,11 +30,14 @@ def load_mutation_rate():
     return pd.read_pickle(fn)['mu']
 
 
-def plot_mutation_rate(mu):
+def plot_mutation_rate(mu, ax=None):
     '''Plot accumulation of mutations and fits'''
-    fig, ax = plt.subplots(1, 1, figsize=(13, 8))
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(13, 8))
+    else:
+        fig=None
     lim = 6.7
-    ax.set_xlim(-lim, lim * 2 + 3)
+    ax.set_xlim(-lim, lim * 2 + 10)
     ax.set_ylim(lim, -lim)
     ax.axis('off')
 
@@ -55,7 +58,7 @@ def plot_mutation_rate(mu):
     def get_arrow_properties(mut, scale=1.0):
         from matplotlib import cm
         cmap = cm.jet
-        wmin = 0.1
+        wmin = 0.2
         wmax = 0.6
         fun = lambda x: np.log10(x)
         mumin = fun(1e-7)
@@ -88,14 +91,14 @@ def plot_mutation_rate(mu):
 
 
     oft = 0.8
-    ax.text(rc + 2.4, - rc + oft - 1.7, 'Rates [per site per day]:', fontsize=28)
+    ax.text(rc + 2.4, - rc + oft - 1.7, 'Rates [per site per day]:', fontsize=fs*1.2)
 
     def write_mut(mut, dy):
         decade = int(np.floor(np.log10(mu.loc[mut])))
         flo = mu.loc[mut] * 10**(-decade)
         mtxt = '$' + '{:1.1f}'.format(flo) + ' \cdot ' + '10^{'+str(decade)+'}$'
-        ax.text(rc + 2.3, -rc + oft - 0.6 + dy, mut[0]+u' \u2192 '+mut[-1], fontsize=27)
-        ax.text(rc + 10.2, -rc + oft - 0.6 + dy, mtxt, ha='right', fontsize=27)
+        ax.text(rc + 2.3, -rc + oft - 0.6 + dy, mut[0]+u' \u2192 '+mut[-1], fontsize=fs)
+        ax.text(rc + 10.2, -rc + oft - 0.6 + dy, mtxt, ha='right', fontsize=fs)
         ax.arrow(rc + 4.9, - rc + oft - 0.8 + dy, 2.0, 0, length_includes_head=True,
                  **get_arrow_properties(mu.loc[mut], scale=0.7))
 
