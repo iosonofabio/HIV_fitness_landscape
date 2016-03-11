@@ -408,31 +408,36 @@ def selcoeff_confidence(region, data, fname=None):
     '''
     from util import add_panel_label
 
-    av = process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
+    # generate boo strap estimates of minor SNP frequences
+    av = process_average_allele_frequencies(data, [region],
+                    nbootstraps=100, bootstrap_type='bootstrap')
     combined_af = av['combined_af']
     combined_entropy = av['combined_entropy']
     minor_af = av['minor_af']
     combined_entropy_bs = av['combined_entropy_bs']
     minor_af_bs = av['minor_af_bs']
 
+    # convert minor_af to 100x(length of gene) array of minor SNPs
     minor_af_array=np.array(minor_af_bs[region])
     qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
+    # calculate selection coefficient quantiles corresponding to SNP_freq quantiles
     scb = (data['mut_rate'][region]/(af_cutoff+qtiles)).T
     sel_coeff_array = (data['mut_rate'][region]/(af_cutoff+minor_af_array))
     sel_coeff_array[sel_coeff_array<0.001]=0.001
     sel_coeff_array[sel_coeff_array>0.1]=0.1
     which_quantile = np.zeros(minor_af_array.shape[1], dtype=int)
-    thres = [20,40,60,90]
-    for i,(ql, qu) in enumerate(zip(thres[:-1], thres[1:])):
+    thres = [20,40,60]
+    for i,ql in enumerate(thres):
+        # take sites if slice [ql,ql+2]
         sl,su=scoreatpercentile(scb[:,1], ql), scoreatpercentile(scb[:,1], ql+2)
         which_quantile[(scb[:,1]>=sl)&(scb[:,1]<su)]=i+1
 
+    scb[scb>0.1]=0.1
+    scb[scb<0.001]=0.001
     fig, ax = plt.subplots(1, 1, figsize=(8,6))
-    for i in range(1,len(thres)):
+    for i in range(1,len(thres)+1):
         ind = which_quantile==i
         npoints = ind.sum()*sel_coeff_array.shape[0]
-        #plt.hist(scb[ind,1], weights = np.ones(ind.sum(),dtype=float)/ind.sum(),
-        #        bins=np.logspace(-3,-1,21), alpha=0.3, color=cols[i])
         ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
         ax.hist(sel_coeff_array[:,ind].flatten(), weights =np.ones(npoints,dtype=float)/npoints,
                 bins=np.logspace(-3,-1,21), alpha=0.7, color=cols[i+3])
@@ -486,12 +491,13 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
         entropy_thresholds =  np.array(np.linspace(0,A.shape[0],8), int)
         entropy_boundaries = zip(entropy_thresholds[:-1], entropy_thresholds[1:])
         if smoothing=='harmonic':
-            tmp_mean_inv=np.mean(1.0/A[li:ui,1], axis=0)
-            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), 1.0/tmp_mean_inv)
-                                                 for li,ui in entropy_boundaries])
+            tmp_mean_inv= [(np.median(A[li:ui,0]), np.mean(1.0/A[li:ui,1], axis=0))
+                            for li,ui in entropy_boundaries]
+            avg_sel_coeff[label_str] = np.array([(xsSmed, 1.0/avg_inv)
+                                                for xsSmed, avg_inv in tmp_mean_inv])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
-                                                         (tmp_mean_inv**-2)*np.std(1.0/A[li:ui,1], axis=0))
-                                                        for li,ui in entropy_boundaries])
+                                            (avg_inv**-2)*np.std(1.0/A[li:ui,1], axis=0))
+                                            for (li,ui), (_a,avg_inv) in zip(entropy_boundaries,tmp_mean_inv)])
         elif smoothing=='median':
             avg_sel_coeff[label_str] = np.array([np.median(A[li:ui,:], axis=0) for li,ui in entropy_boundaries])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.std(A[li:ui,1], axis=0))
@@ -674,7 +680,7 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     # NOTE: HXB2 alignment has way more sequences resulting in better correlations
-    reference = HIVreference(refname='HXB2', subtype=args.subtype)
+    reference = HIVreference(refname='NL4-3', subtype=args.subtype)
 
     # Intermediate data are saved to file for faster access later on
     fn = '../data/avg_nucleotide_allele_frequency.pickle.gz'
