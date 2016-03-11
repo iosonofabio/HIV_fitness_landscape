@@ -496,7 +496,7 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
             avg_sel_coeff[label_str] = np.array([(xsSmed, 1.0/avg_inv)
                                                 for xsSmed, avg_inv in tmp_mean_inv])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
-                                            (avg_inv**-2)*np.std(1.0/A[li:ui,1], axis=0))
+                                            (avg_inv**-2)*np.std(1.0/A[li:ui,1], axis=0)/np.sqrt(ui-li))
                                             for (li,ui), (_a,avg_inv) in zip(entropy_boundaries,tmp_mean_inv)])
         elif smoothing=='median':
             avg_sel_coeff[label_str] = np.array([np.median(A[li:ui,:], axis=0) for li,ui in entropy_boundaries])
@@ -577,7 +577,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     add_panel_label(axs[0], 'A', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/figure_4A_' + reference.subtype + '.'+ext)
+        fig.savefig('../figures/figure_4A_st_' + reference.subtype + '.'+ext)
 
 
     # Violin plots of the fitness cost distributions for syn and nonsyn
@@ -598,7 +598,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     add_panel_label(ax, 'B', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/figure_4B_' + reference.subtype +'.'+ext)
+        fig.savefig('../figures/figure_4B_st_' + reference.subtype +'.'+ext)
 
 
 def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af):
@@ -686,7 +686,7 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     # NOTE: HXB2 alignment has way more sequences resulting in better correlations
-    reference = HIVreference(refname='NL4-3', subtype=args.subtype)
+    reference = HIVreference(refname='HXB2', subtype=args.subtype)
 
     # Intermediate data are saved to file for faster access later on
     fn = '../data/avg_nucleotide_allele_frequency.pickle.gz'
@@ -729,21 +729,21 @@ if __name__=="__main__":
     # Prepare data for Figure 2 (see figure_2.py for the plot)
     selcoeff_vs_entropy(regions,  minor_af, synnonsyn, data['mut_rate'],
                         reference,
-                        figname='../figures/'+region+'_sel_coeff_scatter'+args.subtype+'.png',
-                        dataname='../data/combined_af_avg_selection_coeff_'+args.subtype+'.pkl',
+                        figname='../figures/'+region+'_sel_coeff_scatter_st_'+args.subtype+'.png',
+                        dataname='../data/combined_af_avg_selection_coeff_st_'+args.subtype+'.pkl',
                         smoothing='harmonic')
 
     # Figure 3
     for region in regions:
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'],
-                              '../figures/'+region+'_sel_coeff'+args.subtype, ref=reference)
+                              '../figures/'+region+'_sel_coeff_st_'+args.subtype, ref=reference)
         selcoeff_confidence(region, data,
-                            '../figures/'+region+'_sel_coeff_confidence_'+args.subtype)
+                            '../figures/'+region+'_sel_coeff_confidence_st_'+args.subtype)
 
     selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
                           data['mut_rate'],
-                          '../figures/figure_3ABC_'+args.subtype)
+                          '../figures/figure_3ABC_st_'+args.subtype)
 
     # Figure 4
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
