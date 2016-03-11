@@ -442,7 +442,9 @@ def selcoeff_confidence(region, data, fname=None):
     plt.tick_params(labelsize=fs*0.8)
 
     plt.tight_layout()
-    add_panel_label(ax, 'D', x_offset=-0.1)
+    region_panels = {'gag': 'D', 'pol': 'A', 'env': 'B', 'nef': 'C', 'vif': 'D',
+                     'vpu': 'E', 'vpr': 'F'}
+    add_panel_label(ax, region_panels.get(region, 'D'), x_offset=-0.1)
 
     if fname is not None:
         for ext in ['png', 'svg', 'pdf']:
