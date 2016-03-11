@@ -31,7 +31,7 @@ from util import add_binned_column, boot_strap_patients
 # Functions
 def load_data_saturation():
     import cPickle as pickle
-    fn = 'data/fitness_cost_saturation_plot.pickle'
+    fn = '../data/fitness_cost_saturation_plot.pickle'
     with open(fn, 'r') as f:
         data = pickle.load(f)
     return data
@@ -39,8 +39,8 @@ def load_data_saturation():
 
 def load_data_KL():
     '''Load data from Vadim's KL approach'''
-    S_center = np.loadtxt('figures/Vadim/smuD_KL_quant_medians.txt')
-    s_mean, s_std = np.loadtxt('figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
+    S_center = np.loadtxt('../figures/Vadim/smuD_KL_quant_medians.txt')
+    s_mean, s_std = np.loadtxt('../figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
@@ -52,7 +52,7 @@ def load_data_KL():
 def load_data_pooled():
     '''Load data from the pooled allele frequencies'''
     import cPickle as pickle
-    with open('data/combined_af_avg_selection_coeff.pkl', 'r') as f:
+    with open('../data/combined_af_avg_selection_coeff_st_any.pkl', 'r') as f:
         caf_s = pickle.load(f)
     return caf_s
 
@@ -140,7 +140,7 @@ def plot_fit(data_sat, data_KL, data_pooled):
 
     # B2: KL fit
     # Ignore most conserved quantile
-    x = np.array(data_KL.index)[1:]
+    x = np.array(data_KL.index)  [1:]
     y = np.array(data_KL['mean'])[1:]
     dy = np.array(data_KL['std'])[1:]
     ax.errorbar(x, y, yerr=dy,
@@ -152,9 +152,9 @@ def plot_fit(data_sat, data_KL, data_pooled):
                )
 
     # B3: pooled
-    x = data_pooled['all'][:, 0]
-    y = data_pooled['all'][:, 1]
-    dy = data_pooled['all_std'][:, 1]
+    x = data_pooled['all'][:-1, 0]
+    y = data_pooled['all'][:-1, 1]
+    dy = data_pooled['all_std'][:-1, 1]
     ax.errorbar(x, y, yerr=dy,
                 ls='-',
                 marker='o',
@@ -195,3 +195,6 @@ if __name__ == '__main__':
     data_pooled = load_data_pooled()
 
     plot_fit(data_sat, data_KL, data_pooled)
+
+    for ext in ['.png', '.pdf', '.svg']:
+        plt.savefig('../figures/figure_2'+ext)
