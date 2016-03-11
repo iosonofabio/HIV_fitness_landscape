@@ -602,7 +602,7 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
-def export_selection_coefficients(data, total_nonsyn_mutation_rates):
+def export_selection_coefficients(data, total_nonsyn_mutation_rates, subtype):
     '''
     write selection coefficients as tab separated files
     files contain position and 25%, 50% and 75% of 100 bootstrap replicates
@@ -623,7 +623,7 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates):
         for q in [25, 50, 75]:
             selcoeff[q] = scoreatpercentile(sel_array, q, axis=0)
 
-        with open('../data/'+region+'_selection_coeffcients.tsv','w') as selfile:
+        with open('../data/'+region+'_selection_coefficients_st_'+subtype+'.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
             selfile.write('# position\tlower quartile\tmedian\tupper quartile\n')
 
@@ -720,7 +720,7 @@ if __name__=="__main__":
 
     plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype+'.pdf')
 
-    export_selection_coefficients(data, total_nonsyn_mutation_rates)
+    export_selection_coefficients(data, total_nonsyn_mutation_rates, args.subtype)
 
     sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
 
