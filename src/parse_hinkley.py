@@ -2,8 +2,8 @@ from itertools import izip
 from collections import defaultdict
 
 def parse_hinkley():
-	header_file = open('data/Hinkley/header.txt', 'ru')
-	fitness_file = open('data/Hinkley/ME-cv-NODRUG.csv', 'ru')
+	header_file = open('../data/Hinkley/header.txt', 'ru')
+	fitness_file = open('../data/Hinkley/ME-cv-NODRUG.csv', 'ru')
 
 	fitness_landscape = defaultdict(dict)
 	for mut, val in izip(header_file,fitness_file):

@@ -577,7 +577,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     add_panel_label(axs[0], 'A', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/cost_along_genome.'+ext)
+        fig.savefig('../figures/figure_4A_' + reference.subtype + '.'+ext)
 
 
     # Violin plots of the fitness cost distributions for syn and nonsyn
@@ -598,7 +598,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     add_panel_label(ax, 'B', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/distributions_per_gene.'+ext)
+        fig.savefig('../figures/figure_4B_' + reference.subtype +'.'+ext)
 
 
 def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af):
@@ -613,7 +613,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
     print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
 
 
-def export_selection_coefficients(data, minor_af, synnonsyn):
+def export_selection_coefficients(data, synnonsyn, subtype):
     from scipy.stats import scoreatpercentile
     def sel_out(s):
         if s<0.001:
@@ -624,13 +624,19 @@ def export_selection_coefficients(data, minor_af, synnonsyn):
             return s
 
     for region in data['af_by_pat']:
-        (combined_af, combined_entropy, minor_af,combined_entropy_bs, minor_af_bs) = \
-            process_average_allele_frequencies(data, [region], nbootstraps=100, bootstrap_type='bootstrap')
+        av = process_average_allele_frequencies(data, [region],
+                        nbootstraps=100, bootstrap_type='bootstrap')
+        combined_af = av['combined_af']
+        combined_entropy = av['combined_entropy']
+        minor_af = av['minor_af']
+        combined_entropy_bs = av['combined_entropy_bs']
+        minor_af_bs = av['minor_af_bs']
+
         minor_af_array=np.array(minor_af_bs[region])
         qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
         scb = (data['mut_rate'][region]/(af_cutoff+qtiles))
 
-        with open('../data/nuc_'+region+'_selection_coeffcients.tsv','w') as selfile:
+        with open('../data/nuc_'+region+'_selection_coeffcients_'+ subtype +'.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
             selfile.write('# position\tlower quartile\tmedian\tupper quartile \t syn \n')
 
@@ -723,21 +729,25 @@ if __name__=="__main__":
     # Prepare data for Figure 2 (see figure_2.py for the plot)
     selcoeff_vs_entropy(regions,  minor_af, synnonsyn, data['mut_rate'],
                         reference,
-                        figname='../figures/'+region+'_sel_coeff_scatter.png',
-                        dataname='../data/combined_af_avg_selection_coeff.pkl',
+                        figname='../figures/'+region+'_sel_coeff_scatter'+args.subtype+'.png',
+                        dataname='../data/combined_af_avg_selection_coeff_'+args.subtype+'.pkl',
                         smoothing='harmonic')
 
     # Figure 3
     for region in regions:
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'],
-                              '../figures/'+region+'_sel_coeff', ref=reference)
+                              '../figures/'+region+'_sel_coeff'+args.subtype, ref=reference)
         selcoeff_confidence(region, data,
-                            '../figures/'+region+'_sel_coeff_confidence')
+                            '../figures/'+region+'_sel_coeff_confidence_'+args.subtype)
 
     selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
                           data['mut_rate'],
-                          '../figures/all_sel_coeff')
+                          '../figures/figure_3ABC_'+args.subtype)
 
     # Figure 4
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
+
+
+    # export selection coefficients to file as supplementary info
+    export_selection_coefficients(data, synnonsyn, args.subtype)

@@ -40,7 +40,7 @@ def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
 def calc_amino_acid_mutation_rates():
     from Bio.Seq import CodonTable
 
-    with open('data/mutation_rate.pickle') as mutfile:
+    with open('../data/mutation_rate.pickle') as mutfile:
         nuc_mutation_rates = cPickle.load(mutfile)['mu']
 
     CT = CodonTable.standard_dna_table.forward_table
@@ -192,7 +192,7 @@ def collect_data(patient_codes, regions, subtype):
     return {'af_by_pat':combined_af_by_pat, 'init_codon': initial_codons_by_pat, 'pheno':combined_phenos}
 
 def get_associations(regions, aa_ref='NL4-3'):
-    hla_assoc = pd.read_csv("data/Carlson_el_al_2012_HLAassoc.csv")
+    hla_assoc = pd.read_csv("../data/Carlson_el_al_2012_HLAassoc.csv")
     #hla_assoc = pd.read_csv("data/Brumme_et_al_HLAassoc.csv")
     associations = {}
     for region in regions:
@@ -490,7 +490,7 @@ def selection_coefficients_compare_association(association, associations, region
 
 
 def compare_experiments(data, aa_mutation_rates):
-    fc = pd.read_csv('data/fitness_costs.csv')
+    fc = pd.read_csv('../data/fitness_costs.csv')
     coefficients = {}
     for ii, mut in fc.iterrows():
         region = mut['region']
@@ -559,16 +559,22 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
             codons = {pat:data['init_codon'][region][pat][pos+offset] for pat in pcodes}
             mut_rates = {pat:np.sum([aa_mutation_rates[(codons[pat], aa)] for aa in target_aa])
                         for pat in pcodes}
-            freqs = {pat:np.sum([data['af_by_pat'][region][pat][alphaal.index(aa), pos+offset]/data['af_by_pat'][region][pat][:20,pos+offset].sum()
+            freqs = {pat:np.sum([data['af_by_pat'][region][pat][alphaal.index(aa), pos+offset]\
+                                /data['af_by_pat'][region][pat][:20,pos+offset].sum()
                         for aa in target_aa]) for pat in pcodes}
 
 
             drug_afs[(cons_aa,pos,target_aa)] = freqs
             drug_mut_rates[(cons_aa,pos,target_aa)] = mut_rates
 
-        drug_afs_items.extend(filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values()))>0, sorted(drug_afs.items(), key=lambda x:x[0][1])))
+        drug_afs_items.extend(filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values()))>0,
+                                     sorted(drug_afs.items(), key=lambda x:x[0][1])))
         mut_types.append(len(drug_afs_items))
-        print('Monomorphic:', prot, [''.join(map(str,x[0])) for x in filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values())    )==0, sorted(drug_afs.items(), key=lambda x:x[0][1]))])
+        #make list of all mutations whose non-nan frequencies sum to 0
+        mono_muts = [''.join(map(str,x[0])) for x in
+                    filter(lambda x:np.sum(filter(lambda y:~np.isnan(y), x[1].values()))==0,
+                           sorted(drug_afs.items(), key=lambda x:x[0][1]))]
+        print('Monomorphic:', prot, mono_muts)
 
     plt.ylim([3e-5, 1e-1])
     for mi in mut_types[:-1]:
@@ -611,17 +617,19 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates):
             return s
 
     for region in data['af_by_pat']:
-        sel_array = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=100)
+        sel_array = selection_coefficients_per_site(region, data,
+                            total_nonsyn_mutation_rates, nbootstraps=100)
         selcoeff={}
         for q in [25, 50, 75]:
             selcoeff[q] = scoreatpercentile(sel_array, q, axis=0)
 
-        with open('data/'+region+'_selection_coeffcients.tsv','w') as selfile:
+        with open('../data/'+region+'_selection_coeffcients.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
             selfile.write('# position\tlower quartile\tmedian\tupper quartile\n')
 
             for pos in xrange(selcoeff[25].shape[0]):
-                selfile.write('\t'.join(map(str,[pos+1]+[sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
+                selfile.write('\t'.join(map(str,[pos+1]+
+                        [sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
 def plot_drug_resistance_mutation_trajectories(pcode):
     '''
@@ -655,14 +663,14 @@ if __name__=="__main__":
                         help='subtype to compare against')
     args = parser.parse_args()
 
-    fn = 'data/avg_aa_allele_frequency.pickle.gz'
+    fn = '../data/avg_aa_allele_frequency_st_'+args.subtype+'.pickle.gz'
 
     regions = ['gag', 'pol', 'nef', 'env', 'vif']
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
-            patient_codes = ['p2','p3', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+            patient_codes = ['p2','p3','p5','p8','p9','p10','p11'] # subtype B only
         else:
-            patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
+            patient_codes = ['p1','p2','p3','p5','p6','p8','p9','p10', 'p11'] # patients
         data = collect_data(patient_codes, regions, args.subtype)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
@@ -670,7 +678,10 @@ if __name__=="__main__":
         with gzip.open(fn) as ifile:
             data = cPickle.load(ifile)
 
-    combined_af, combined_entropy, minor_af = process_average_allele_frequencies(data, regions, nbootstraps=0, nstates=20)
+    av = process_average_allele_frequencies(data, regions, nbootstraps=0,nstates=20)
+    combined_af = av['combined_af']
+    combined_entropy = av['combined_entropy']
+    minor_af = av['minor_af']
 
     associations = get_associations(regions)
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
@@ -685,8 +696,11 @@ if __name__=="__main__":
 
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         if region=='pol':
-            compare_hinkley(data,reference, total_nonsyn_mutation_rates, fname='figures/hinkley_comparison.pdf')
-        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,'figures/'+region+'_aa_entropy_scatter.pdf', annotate_protective=True)
+            compare_hinkley(data,reference, total_nonsyn_mutation_rates,
+                            fname='../figures/hinkley_comparison.pdf')
+        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
+                                         '../'+region+'_aa_entropy_scatter_st_'
+                                         +args.subtype+'.pdf', annotate_protective=True)
         phenotype_correlations[(region, 'entropy')] = (rho, pval)
         erich+=tmp
         for phenotype, vals in data['pheno'][region].iteritems():
@@ -698,13 +712,13 @@ if __name__=="__main__":
                 print("Phenotype scatter failed for:",region, phenotype)
                 phenotype_correlations[(region, phenotype)] = ('NaN', 'NaN')
 
-    with open("phenotype_correlation.tsv", 'w') as pheno_file:
+    with open("../data/phenotype_correlation_st_"+args.subtype+".tsv", 'w') as pheno_file:
         pt = ['entropy']+data['pheno'][regions[0]].keys()
         pheno_file.write('\t'.join(['gene']+pt)+'\n')
         for region in regions:
             pheno_file.write('\t'.join([region]+[str(phenotype_correlations[(region, pheno)][0]) for pheno in pt])+'\n')
 
-    plot_drug_resistance_mutations(data, aa_mutation_rates, 'figures/drug_resistance_mutations.pdf')
+    plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype+'.pdf')
 
     export_selection_coefficients(data, total_nonsyn_mutation_rates)
 
@@ -715,28 +729,33 @@ if __name__=="__main__":
     #for thres in np.arange(1,200,5):
     pheno='structural'
     for thres in np.linspace(0,3,21):
-        KS = selection_coefficients_compare_pheno(pheno, thres, regions, data, total_nonsyn_mutation_rates, plot=False)
+        KS = selection_coefficients_compare_pheno(pheno, thres, regions,
+                                data, total_nonsyn_mutation_rates, plot=False)
         pval.append((thres, np.log(KS['pol'].pvalue)))
 
     pval = np.array(pval)
     plt.plot(pval[:,0], pval[:,1])
 
-    KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions, data, total_nonsyn_mutation_rates, plot =True)
+    KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions,
+                                data, total_nonsyn_mutation_rates, plot =True)
 
-    KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions, data, total_nonsyn_mutation_rates, plot=True)
+    KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions,
+                                data, total_nonsyn_mutation_rates, plot=True)
 
-    KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions, data, total_nonsyn_mutation_rates, plot =True)
+    KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions,
+                                data, total_nonsyn_mutation_rates, plot =True)
 
-    KS_HLA = selection_coefficients_compare_association('HLA', associations, regions, data, total_nonsyn_mutation_rates)
+    KS_HLA = selection_coefficients_compare_association('HLA', associations, regions,
+                                data, total_nonsyn_mutation_rates)
 
 
 
-    fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
-
-    ws=50
-    for ri, region in enumerate(regions):
-        #axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
-        axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], np.convolve(np.ones(ws, dtype=float)/ws, sc[region], mode='same'), c=cols[ri], ls='-')
-
-    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
+#    fig, axs = plt.subplots(2,1,sharex=True, gridspec_kw={'height_ratios':[8, 1]})
+#
+#    ws=50
+#    for ri, region in enumerate(regions):
+#        #axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], 1.0/np.convolve(np.ones(ws, dtype=float)/ws, 1.0/sc[region], mode='same'), c=cols[ri])
+#        axs[0].plot([x for x in global_ref.annotation[region] if x%3==0], np.convolve(np.ones(ws, dtype=float)/ws, sc[region], mode='same'), c=cols[ri], ls='-')
+#
+#    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
