@@ -26,12 +26,12 @@ outdir_name = '../data/'
 
 
 # Functions
-def Covariance(p_ka):
+def covariance(p_ka):
     '''Covariance matrix and correlation coefficient
-    
+
     Input parameters:
     p_ka - nucleotide frequencies by site by time point
-    
+
     Returns:
     time-covariance matrix
     '''
@@ -41,12 +41,12 @@ def Covariance(p_ka):
 
 def fit_upper_multipat(xk_q_all, tk_all, LL=None):
     '''Fitting the quantile data with a linear law
-    
+
     Input parameters:
     k_q_all - list of by-quantile mean frequencies for all patients
     tk_all - list of the time points for all patients
     LL - number of nucleotdies in the quantile for each patient
-    
+
     Returns:
     slope (mutaion rate)
     '''
@@ -66,13 +66,13 @@ def fit_upper_multipat(xk_q_all, tk_all, LL=None):
 def KLfit_multipat_mu(Ckq_q_all, xk_q_all, tk_all, mu):
     '''
     Simultaneous KL divergence minimization for several quantiles
-    
+
     Input parameters:
     Ckq_q_all - list of by-quantile covariance matrices for all patients
     xk_q_all - list of by-quantile mean frequencies for all patients
     tk_all - list of the time points for all patients
     mu - mutation rate
-    
+
     Returns:
     fitness parameters for each quantile, mutation rate and noise parameter
     '''
@@ -87,7 +87,7 @@ def KLfit_multipat_mu(Ckq_q_all, xk_q_all, tk_all, mu):
             a0[:-1] += (1.- s*dt_k[1:])**2/dt_k[1:]
             a1 = -(1.- s*dt_k[1:])/dt_k[1:]
         return (np.diag(a0) + np.diag(a1,1) + np.diag(a1,-1))
-    
+
     def KL_multipat(sD):
         D0 = sD[-1]**2
         Like = np.zeros((len(tk_all),q))
@@ -199,19 +199,19 @@ def amoeba_vp(func, x0, args=(),
 
 
 def patient_preprocessing(pat_name,q, div = False, outliers = True, xcut = 0.0, xcut_up = 0.):
-    '''Load patient data, remove outliers and return average frequencies by 
+    '''Load patient data, remove outliers and return average frequencies by
     timepoint and covariances
-    
+
     Input arguments:
     pat_name - patient name
     q - number of entropy categories
-    
+
     Returns:
     xka_q - nucleotide frequencies by time-point, site, quantile
     tt - corresponding time values
     Smedians, Squant
     '''
-    
+
     print pat_name
     PAT = Patient.load(pat_name)
     tt = PAT.times()
@@ -252,9 +252,9 @@ def patient_preprocessing(pat_name,q, div = False, outliers = True, xcut = 0.0, 
             nonout0 = range(x_ka0.shape[1]); nonout = [j for j in nonout0 if j not in out]
             xka_q_new.append(xka_q[jq][:,nonout])
         xka_q = list(xka_q_new)
-    
+
     return xka_q, tt, Smedians, Squant
-    
+
 # Script
 if __name__=="__main__":
 
@@ -277,14 +277,14 @@ if __name__=="__main__":
     Lq = np.zeros((len(patient_names),q),dtype = 'int')
     for jpat, pat_name in enumerate(patient_names):
         xka_q, tt, Smedians, Squant = patient_preprocessing(pat_name,q)
-        
+
         # Calculate mean and covariances
         xk_q = np.zeros((q,tt.shape[0]))
         Ckq_q = np.zeros((q,tt.shape[0],tt.shape[0]))
         for jq, x_ka in enumerate(xka_q):
             Lq[jpat,jq] = x_ka.shape[1]
             xk_q[jq,:] = x_ka.mean(axis=1)
-            Ckq_q[jq,:,:] = Covariance(x_ka)
+            Ckq_q[jq,:,:] = covariance(x_ka)
 
         xk_q_all.append(xk_q)
         Ckq_q_all.append(Ckq_q)
@@ -294,7 +294,7 @@ if __name__=="__main__":
     smuD_KL_q_multipat_mu = np.zeros(q+2)
     #smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
     smuD_KL_q_multipat_mu[q] = 1.2e-5 # fixed mutation rate.
-    ii_sD = range(q+2); ii_sD.remove(q)
+    ii_sD = [i for i in xrange(q+2) if i != q]
     smuD_KL_q_multipat_mu[ii_sD] = KLfit_multipat_mu(Ckq_q_all,xk_q_all,tt_all,smuD_KL_q_multipat_mu[q])
 
     # Saving fitness coefficients and mutation rates
