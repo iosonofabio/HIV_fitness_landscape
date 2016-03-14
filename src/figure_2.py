@@ -2,7 +2,11 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure for the fitness cost estimate from the saturation curves.
+content:    Make figure 2. This script plots precomputed data, so you have to run
+            it after the following scripts that actually compute the results:
+               - fitness_cost_saturation.py (sat fit)
+               - fitness_cost_KL.py (KL fit)
+               - combined_af.py (pooled fit)
 '''
 # Modules
 import os
@@ -27,7 +31,7 @@ from util import add_binned_column, boot_strap_patients
 # Functions
 def load_data_saturation():
     import cPickle as pickle
-    fn = 'data/fitness_cost_saturation_plot.pickle'
+    fn = '../data/fitness_cost_saturation_plot.pickle'
     with open(fn, 'r') as f:
         data = pickle.load(f)
     return data
@@ -35,19 +39,8 @@ def load_data_saturation():
 
 def load_data_KL():
     '''Load data from Vadim's KL approach'''
-    S_quantiles = np.loadtxt('data/smuD_KL_quantiles.txt')
-    S_center = 0.5 * (S_quantiles[:-1] + S_quantiles[1:])
-
-    raw = np.loadtxt('data/smuD_KL.txt')
-    s = raw[:, :-2]
-    
-    # Bootstrap
-    n_repr = 100
-    s_BS = np.array([np.mean([s[i] for i in np.random.randint(s.shape[0], size=s.shape[0])],
-                             axis=0)
-                     for j in xrange(n_repr)])
-    s_mean = s_BS.mean(axis=0)
-    s_std = s_BS.std(axis=0)
+    S_center = np.loadtxt('../figures/Vadim/smuD_KL_quant_medians.txt')
+    s_mean, s_std = np.loadtxt('../figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
@@ -59,13 +52,14 @@ def load_data_KL():
 def load_data_pooled():
     '''Load data from the pooled allele frequencies'''
     import cPickle as pickle
-    with open('data/combined_af_avg_selection_coeff.pkl', 'r') as f:
+    with open('../data/combined_af_avg_selection_coeff_st_any.pkl', 'r') as f:
         caf_s = pickle.load(f)
     return caf_s
 
 
 def plot_fit(data_sat, data_KL, data_pooled):
     from matplotlib import cm
+    from util import add_panel_label
 
     palette = sns.color_palette('colorblind')
 
@@ -146,7 +140,7 @@ def plot_fit(data_sat, data_KL, data_pooled):
 
     # B2: KL fit
     # Ignore most conserved quantile
-    x = np.array(data_KL.index)[1:]
+    x = np.array(data_KL.index)  [1:]
     y = np.array(data_KL['mean'])[1:]
     dy = np.array(data_KL['std'])[1:]
     ax.errorbar(x, y, yerr=dy,
@@ -158,9 +152,9 @@ def plot_fit(data_sat, data_KL, data_pooled):
                )
 
     # B3: pooled
-    x = data_pooled['all'][:, 0]
-    y = data_pooled['all'][:, 1]
-    dy = data_pooled['all_std'][:, 1]
+    x = data_pooled['all'][:-1, 0]
+    y = data_pooled['all'][:-1, 1]
+    dy = data_pooled['all_std'][:-1, 1]
     ax.errorbar(x, y, yerr=dy,
                 ls='-',
                 marker='o',
@@ -178,6 +172,11 @@ def plot_fit(data_sat, data_KL, data_pooled):
     ax.set_yscale('log')
     ax.xaxis.set_tick_params(labelsize=fs)
     ax.yaxis.set_tick_params(labelsize=fs)
+
+
+    # Panel labels
+    add_panel_label(axs[0], 'A', x_offset=-0.27)
+    add_panel_label(axs[1], 'B', x_offset=-0.21)
 
     plt.tight_layout()
     plt.ion()
@@ -197,4 +196,5 @@ if __name__ == '__main__':
 
     plot_fit(data_sat, data_KL, data_pooled)
 
-
+    for ext in ['.png', '.pdf', '.svg']:
+        plt.savefig('../figures/figure_2'+ext)
