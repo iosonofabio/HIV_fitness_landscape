@@ -212,157 +212,129 @@ def plot_mutation_increase(data, mu=None, axs=None):
         plt.savefig('mutation_linear_increase.png')
 
 
-def plot_mutation_rate_matrix(mu, dmulog10=None, savefig=False, ax=None):
-    '''Plot mutation rate matrix'''
-    from matplotlib import cm
-    sns.set_style('dark')
-
-    fig_width = 5
-    fs = 16
-
+def plot_mutation_rate_graph(mu, ax=None):
+    '''Plot accumulation of mutations and fits'''
     if ax is None:
-        fig, ax = plt.subplots(figsize=(fig_width, fig_width))
-        ax.set_title(mu.name+'\n[$\log_{10}$ changes $\cdot$ day$^{-1}$]',
-                     fontsize=fs)
+        fig, ax = plt.subplots(1, 1, figsize=(18, 8))
     else:
-        ax.set_title('$\log_{10}$ changes $\cdot$ day$^{-1}$', fontsize=fs)
+        fig=None
 
-    M = np.zeros((4, 4))
-    for mut, rate in mu.iteritems():
-        i_from = alphal.index(mut[0])
-        i_to = alphal.index(mut[-1])
-        M[i_from, i_to] = rate
-    logM = np.log10(M)
+    fs = 16
+    lim = 6.7
+    ax.set_xlim(-lim, lim * 2 + 10 + 0.3)
+    ax.set_ylim(lim, -lim)
+    ax.axis('off')
 
-    ax.imshow(logM, interpolation='nearest',
-              cmap=cm.jet,
-              vmin=-7.1, vmax=-4.5)
-    ax.set_xlim(-0.5, 3.5)
-    ax.set_ylim(3.5, -0.5)
-    ax.set_xticks([0, 1, 2, 3])
-    ax.set_yticks([0, 1, 2, 3])
-    ax.set_xticklabels(alphal[:4])
-    ax.set_yticklabels(alphal[:4])
-    ax.xaxis.set_tick_params(labelsize=fs)
-    ax.yaxis.set_tick_params(labelsize=fs)
-    ax.set_ylabel('From', fontsize=fs)
-    ax.set_xlabel('To', fontsize=fs)
+    nucs = ['A', 'C', 'G', 'T']
+    rc = 4
+    r = 1.4
+    xoff = -1
+    for iy, yc in enumerate([-rc, rc]):
+        for ix, xc in enumerate([-rc, rc]):
+            circ = plt.Circle((xc + xoff, yc), radius=r,
+                              edgecolor='black',
+                              facecolor=([0.9] * 3),
+                              lw=2.5,
+                             )
+            ax.add_patch(circ)
+            i = 2 * iy + ix
+            ax.text(xc + xoff, yc, nucs[i], ha='center', va='center', fontsize=34)
 
-    for mut, rate in mu.iteritems():
-        i_from = alphal.index(mut[0])
-        i_to = alphal.index(mut[-1])
-        if -6.4 < np.log10(rate) < -5:
-            color = 'black'
+    def get_arrow_properties(mut, scale=1.0):
+        from matplotlib import cm
+        cmap = cm.jet
+        wmin = 0.2
+        wmax = 0.6
+        fun = lambda x: np.log10(x)
+        mumin = fun(1e-7)
+        mumax = fun(2e-5)
+        if isinstance(mut, basestring):
+            m = fun(mu.loc[mut, 'mu'])
         else:
-            color = 'white'
+            m = fun(mut)
+        frac = (m - mumin) / (mumax - mumin)
+        w = wmin + frac * (wmax - wmin)
+        return {'width': scale * w,
+                'head_width': scale * w * 2.5,
+                'facecolor': cmap(1.0 * frac),
+                'edgecolor': cmap(1.0 * frac),
+               }
 
-        txt = '{:1.1f}'.format(np.log10(rate))
-        if dmulog10 is not None:
-            txt = '$'+txt+' \pm '+'{:1.1f}'.format(dmulog10[mut])+'$'
-
-        ax.text(i_to, i_from,
-                txt,
-                fontsize=fs-2,
-                ha='center',
-                va='center',
-                color=color,
-               )
-
-    ax.grid(False)
-
-    plt.tight_layout()
-
-    if savefig:
-        fig_filename = '/home/fabio/university/phd/thesis/tex/figures/mutation_rate_matrix_neutralclass'
-        for ext in ['svg', 'pdf', 'png']:
-            fig.savefig(fig_filename+'.'+ext)
-
-    plt.ion()
-    plt.show()
+    gap = 0.5
+    ax.arrow(xoff -(rc + gap), -(rc - r - 0.2), 0, 2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('A->G'))
+    ax.arrow(xoff -(rc - gap), (rc - r - 0.2), 0, -2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('G->A'))
+    ax.arrow(xoff +(rc - gap), -(rc - r - 0.2), 0, 2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('C->T'))
+    ax.arrow(xoff +(rc + gap), +(rc - r - 0.2), 0, -2 * (rc - r - 0.2), length_includes_head=True, **get_arrow_properties('T->C'))
+    ax.arrow(xoff -(rc - r - 0.2), -(rc + gap), 2 * (rc - r - 0.2), 0, length_includes_head=True, **get_arrow_properties('A->C'))
+    ax.arrow(xoff +(rc - r - 0.2), -(rc - gap), -2 * (rc - r - 0.2), 0, length_includes_head=True, **get_arrow_properties('C->A'))
+    ax.arrow(xoff -(rc - r - 0.2), +(rc - gap), 2 * (rc - r - 0.2), 0, length_includes_head=True, **get_arrow_properties('G->T'))
+    ax.arrow(xoff +(rc - r - 0.2), +(rc + gap), -2 * (rc - r - 0.2), 0, length_includes_head=True, **get_arrow_properties('T->G'))
+    ax.arrow(xoff -(rc - r - 0.7), -(rc - r - 0.2), 2 * (rc - r - 0.4), 2 * (rc - r - 0.4), length_includes_head=True, **get_arrow_properties('A->T'))
+    ax.arrow(xoff +(rc - r - 0.7), +(rc - r - 0.2), -2 * (rc - r - 0.4), -2 * (rc - r - 0.4), length_includes_head=True, **get_arrow_properties('T->A'))
+    ax.arrow(xoff -(rc - r - 0.5), +(rc - r - 0.2), 2 * (rc - r - 0.3), -2 * (rc - r - 0.3), length_includes_head=True, **get_arrow_properties('G->C'))
+    ax.arrow(xoff +(rc - r - 0.5), -(rc - r - 0.2), -2 * (rc - r - 0.3), +2 * (rc - r - 0.3), length_includes_head=True, **get_arrow_properties('C->G'))
 
 
-def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None, ax=None):
-    '''Compare new estimate for mu with Abram et al 2010'''
-    xmin = -7.3
-    xmax = -4
-    fs = 16
+    oft = 0.8
+    ax.text(rc + 6.4, - 5 + oft - 1.7, 'Rates [per site per day]:', fontsize=fs)
 
-    if ax is None:
-        fig, ax = plt.subplots()
+    def write_mut(mut, dy, dx):
+        decade = int(np.floor(np.log10(mu.loc[mut, 'mu'])))
+        flo = mu.loc[mut, 'mu'] * 10**(-decade)
+        dflo = mu.loc[mut, 'dmulog10'] *  np.log(10) * mu.loc[mut, 'mu'] * 10**(-decade)
+        if dflo >= 0.5:
+            flot = '{:1.0f}'.format(np.round(flo, 0))
+            dflot = '{:1.0f}'.format(np.round(dflo, 0))
+        else:
+            flot = '{:1.1f}'.format(np.round(flo, 1))
+            dflot = '{:1.0f}'.format(np.round(10 * dflo, 0))
+        mtxt = '$' + flot + '('+ dflot+')'+ ' \cdot ' + '10^{'+str(decade)+'}$'
+        ax.text(4 + 2.0 + dx, -5 + oft - 0.6 + dy, mut[0]+u' \u2192 '+mut[-1], fontsize=fs)
+        ax.arrow(4 + 4.4 + dx, - 5 + oft - 0.8 + dy, 1.8, 0, length_includes_head=True,
+                 **get_arrow_properties(mu.loc[mut, 'mu'], scale=0.7))
+        ax.text(4 + 10.2 + dx, -5 + oft - 0.6 + dy, mtxt, ha='right', fontsize=fs)
 
-    x = []
-    y = []
-    for key in mu.index:
-        x.append(np.log10(mu[key]))
-        y.append(np.log10(muA[key]))
+    dy = 0.5
+    dx = 0
+    muts = ['G->C', 'A->T', 'C->G', 'A->C', 'G->T', 'T->A',
+            'T->G', 'C->A', 'A->G', 'T->C', 'C->T', 'G->A']
+    for imut, mut in enumerate(muts):
+        write_mut(mut, dy, dx)
+        dy += 2
+        if imut + 1 == len(muts) // 2:
+            dy -= len(muts) // 2 * 2
+            dx += 9
 
-    if dmulog10 is not None:
-        dx = [dmulog10[key] for key in mu.index]
-    else:
-        dx = None
-
-    if dmuAlog10 is not None:
-        dy = [dmuAlog10[key] for key in mu.index]
-    else:
-        dy = None
-
-    from scipy.stats import pearsonr, spearmanr
-    R = pearsonr(x, y)[0]
-    rho = spearmanr(x, y)[0]
-
-    label = (r'Pearson $r = {0:3.0%}$'.format(np.round(R, 2))+
-             '\n'+
-             r'Spearman $\rho = {0:3.0%}$'.format(np.round(rho, 2)))
-    label = label.replace('%','\%')
-
-    ax.errorbar(x, y,
-                xerr=dx, yerr=dy,
-                ls='none',
-                ms=10,
-                marker='o',
-                label=label)
-
-    ax.plot(np.linspace(xmin, xmax, 1000), np.linspace(xmin, xmax, 1000),
-            color='grey',
-            lw=1,
-            alpha=0.7)
-
-    ax.set_xlim(xmin, xmax)
-    ax.set_ylim(xmin, xmax)
-    ax.set_xlabel(r'$\log_{10}(\mathrm{new\ estimate})$', fontsize=fs)
-    ax.set_ylabel(r'$\log_{10}(\mathrm{Abram\ et\ al.\ 2010})$', fontsize=fs)
-    ax.xaxis.set_tick_params(labelsize=fs)
-    ax.yaxis.set_tick_params(labelsize=fs)
-    ax.legend(loc=2, fontsize=fs)
-    ax.grid(True)
-
-    plt.tight_layout()
-
-    plt.ion()
-    plt.show()
-
-    return ax
+    return fig, ax
 
 
 def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
     '''Plot figure 1 of the paper'''
     print('Plot Figure 1')
-    from figure_S1 import plot_mutation_rate as plot_mutation_rate_graph
     fig = plt.figure(figsize=(12, 11))
     ax1 = plt.subplot2grid((2,2), (0,0))
     ax2 = plt.subplot2grid((2,2), (0,1))
     ax3 = plt.subplot2grid((2,2), (1, 0), colspan=2)
     plot_mutation_increase(data, mu=mu, axs=[ax1, ax2])
-    #plot_mutation_rate_matrix(mu, dmulog10=dmulog10, ax=axs[2])
-    plot_mutation_rate_graph(mu, ax=ax3)
-    #plot_comparison(mu, muA, dmulog10=dmulog10, dmuAlog10=dmuAlog10, ax=axs[3])
+
+    mu_all = pd.DataFrame({'mu': mu,
+                              'muA': muA,
+                              'dmulog10': dmulog10,
+                              'dmuAlog10': dmuAlog10,
+                            })
+    plot_mutation_rate_graph(mu_all,
+                             ax=ax3)
+    plt.tight_layout()
 
     # Add labels
     from util import add_panel_label
     add_panel_label(ax1, 'A', x_offset=-0.2)
     add_panel_label(ax2, 'B', x_offset=-0.2)
     add_panel_label(ax3, 'C', x_offset=-0.08)
-    #add_panel_label(axs[3], 'D', x_offset=-0.2)
+
+    plt.ion()
+    plt.show()
+
 
     for ext in ['svg', 'png', 'pdf']:
         fig.savefig('../figures/figure_1.'+ext)
