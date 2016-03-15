@@ -341,6 +341,50 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
+def entropy_correlation_vs_npat(region, data, synnonsyn, reference):
+    '''
+    evaluate entropy within/cross-sectional correlation for subsets of patients
+    of different size. returns a dictionary with rank correlation coefficients
+    '''
+    from scipy.special import binom
+    from random import sample
+    from collections import defaultdict
+    pats = data['af_by_pat'][region].keys()
+    N = len(pats)
+    within_cross_correlation = defaultdict(list)
+    xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
+    for n in range(1,1+N):
+        for ii in range(int(min(2*binom(N,n),20))):
+            subset = [data['af_by_pat'][region][x] for x in sample(pats, n)]
+            tmp_af = af_average(subset)
+            withS = -(np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0)
+            ind = (xsS>=0.000)&(~np.isnan(withS))
+            within_cross_correlation[n].append(spearmanr(xsS[ind], withS[ind])[0])
+
+    return within_cross_correlation
+
+def SvsNpat(data, synnonsyn, reference, figname=None):
+    '''
+    calculate cross-sectional and within patient entropy correlations
+    for many subsets of patients and plot the average rank correlation
+    against the number of patients used in the within patient average
+    '''
+    for region in ['gag', 'pol', 'vif', 'nef']:
+        xsS_within_corr = entropy_correlation_vs_npat(region, data, synnonsyn, reference)
+        npats = sorted(xsS_within_corr.keys())
+        avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
+        std_corr = [np.std(xsS_within_corr[i]) for i in npats]
+        plt.errorbar([1.0/i for i in npats], y=avg_corr,yerr=std_corr, label=region)
+    plt.legend()
+    plt.ylabel('within/cross-sectional entropy correlation', fontsize=fs)
+    plt.xlabel('1/number of patients', fontsize=fs)
+    plt.xlim(0,1.1)
+    plt.tight_layout()
+    if figname is not None:
+        for ext in ['png', 'svg', 'pdf']:
+            plt.savefig(figname+'.'+ext)
+
+
 
 def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates, fname=None, ref=None):
     '''
@@ -549,7 +593,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
                         np.exp(running_average(np.log(sc[ind]), ws)),
                         c=cols[ri%len(cols)],
                         ls='--' if label_str=='synonymous' else '-',
-                        label=label_str if region=='gag' else None)
+                       label=label_str if region=='gag' else None)
             if ni and region not in ['vpr', 'vpu']:
                 all_sel_coeff.extend([(region, pos, np.log10(sc[pos]), synnonsyn[region][pos]) for pos in range(len(sc))])
 
@@ -611,6 +655,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
         fraction_diverse(region, minor_af, synnonsyn,
                          '../figures/'+region+'_minor_allele_frequency.pdf')
     print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
+
 
 
 def export_selection_coefficients(data, synnonsyn, subtype):
@@ -693,7 +738,7 @@ if __name__=="__main__":
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only
-            #patient_codes = ['p2','p3', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+            #patient_codes = ['p2','p3', 'p4', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         else:
             patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
             #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
