@@ -12,7 +12,7 @@ import seaborn as sns
 from scipy.stats import spearmanr, scoreatpercentile, pearsonr
 from random import sample
 import pandas as pd
-from combined_af import process_average_allele_frequencies, draw_genome
+from combined_af import process_average_allele_frequencies, draw_genome, af_average
 
 fs=16
 ERR_RATE = 2e-3
@@ -305,6 +305,56 @@ def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname =
         plt.savefig(fname)
 
     return rho,pval
+
+def correlation_vs_npat(pheno, region, data, reference):
+    '''
+    evaluate entropy within/cross-sectional correlation for subsets of patients
+    of different size. returns a dictionary with rank correlation coefficients
+    '''
+    from scipy.special import binom
+    from random import sample
+    from collections import defaultdict
+    pats = data['af_by_pat'][region].keys()
+    N = len(pats)
+    within_cross_correlation = defaultdict(list)
+    if pheno=='entropy':
+        xsS = reference.entropy+1e-10
+    else:
+        xsS = np.array(data['pheno'][region][pheno])
+
+    for n in range(1,1+N):
+        for ii in range(int(min(2*binom(N,n),20))):
+            subset = [data['af_by_pat'][region][x] for x in sample(pats, n)]
+            tmp_af = af_average(subset)
+            withS = -(np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0)
+            ind = (xsS>0.000)&(~np.isnan(withS))
+            within_cross_correlation[n].append(spearmanr(xsS[ind], withS[ind])[0])
+
+    return within_cross_correlation
+
+
+def PhenoCorr_vs_Npat(pheno, data, figname=None):
+    '''
+    calculate cross-sectional and within patient entropy correlations
+    for many subsets of patients and plot the average rank correlation
+    against the number of patients used in the within patient average
+    '''
+    for region in ['gag', 'pol', 'vif', 'nef']:
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
+        xsS_within_corr = correlation_vs_npat(pheno, region, data, reference)
+        npats = sorted(xsS_within_corr.keys())
+        avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
+        std_corr = [np.std(xsS_within_corr[i]) for i in npats]
+        plt.errorbar(np.array([1.0/i for i in npats]), y=avg_corr,yerr=std_corr, label=region)
+    plt.legend()
+    plt.ylabel('within entropy/'+pheno+' correlation', fontsize=fs)
+    plt.xlabel('1/number of patients', fontsize=fs)
+    plt.xlim(0,1.1)
+    plt.tight_layout()
+    if figname is not None:
+        for ext in ['png', 'svg', 'pdf']:
+            plt.savefig(figname+'.'+ext)
+
 
 def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa, nbootstraps=0):
     '''
@@ -668,9 +718,11 @@ if __name__=="__main__":
     regions = ['gag', 'pol', 'nef', 'env', 'vif']
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
-            patient_codes = ['p2','p3','p5','p8','p9','p10','p11'] # subtype B only
+            #patient_codes = ['p2','p3','p5','p8','p9','p10','p11'] # subtype B only
+            patient_codes = ['p2','p3','p4', 'p5','p7', 'p8','p9','p10', 'p11'] # patients
         else:
-            patient_codes = ['p1','p2','p3','p5','p6','p8','p9','p10', 'p11'] # patients
+            patient_codes = ['p1','p2','p3','p4', 'p5','p6','p7', 'p8','p9','p10', 'p11'] # patients
+            #patient_codes = ['p1','p2','p3','p5','p6','p8','p9','p10', 'p11'] # patients
         data = collect_data(patient_codes, regions, args.subtype)
         with gzip.open(fn, 'w') as ofile:
             cPickle.dump(data, ofile)
