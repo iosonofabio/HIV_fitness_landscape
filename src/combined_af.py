@@ -363,22 +363,25 @@ def entropy_correlation_vs_npat(region, data, synnonsyn, reference):
 
     return within_cross_correlation
 
-def SvsNpat(data, synnonsyn, reference, figname=None):
+def SvsNpat(data, synnonsyn, reference, figname=None, label_str=''):
     '''
     calculate cross-sectional and within patient entropy correlations
     for many subsets of patients and plot the average rank correlation
     against the number of patients used in the within patient average
     '''
+    from util import add_panel_label
     for region in ['gag', 'pol', 'vif', 'nef']:
         xsS_within_corr = entropy_correlation_vs_npat(region, data, synnonsyn, reference)
         npats = sorted(xsS_within_corr.keys())
         avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
         std_corr = [np.std(xsS_within_corr[i]) for i in npats]
         plt.errorbar([1.0/i for i in npats], y=avg_corr,yerr=std_corr, label=region)
-    plt.legend()
-    plt.ylabel('within/cross-sectional entropy correlation', fontsize=fs)
+    plt.legend(fontsize=fs)
+    plt.ylabel('intra-patient/global entropy correlation', fontsize=fs)
     plt.xlabel('1/number of patients', fontsize=fs)
     plt.xlim(0,1.1)
+    plt.tick_params(labelsize=fs*0.8)
+    add_panel_label(plt.gca(), label_str, x_offset=-0.10)
     plt.tight_layout()
     if figname is not None:
         for ext in ['png', 'svg', 'pdf']:
@@ -658,7 +661,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
 
 
 
-def export_selection_coefficients(data, synnonsyn, subtype):
+def export_selection_coefficients(data, synnonsyn, subtype, reference):
     from scipy.stats import scoreatpercentile
     def sel_out(s):
         if s<0.001:
@@ -681,12 +684,18 @@ def export_selection_coefficients(data, synnonsyn, subtype):
         qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
         scb = (data['mut_rate'][region]/(af_cutoff+qtiles))
 
+        ref_seq = [reference.seq[pos] for pos in reference.annotation[region]]
+        cons_seq = [reference.consensus[pos] for pos in reference.annotation[region]]
+
+
         with open('../data/nuc_'+region+'_selection_coeffcients_'+ subtype +'.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
-            selfile.write('# position\tlower quartile\tmedian\tupper quartile \t syn \n')
+            selfile.write('\t'.join(['# position','consensus', reference.refname,
+                                    'lower quartile','median','upper quartile','syn'])+'\n')
 
             for pos in xrange(scb.shape[1]):
-                selfile.write('\t'.join(map(str,[pos+1]+[sel_out(scb[qi][pos]) for qi in range(scb.shape[0])]
+                selfile.write('\t'.join(map(str,[pos+1, cons_seq[pos], ref_seq[pos]]
+                            +[sel_out(scb[qi][pos]) for qi in range(scb.shape[0])]
                             +[int(synnonsyn[region][pos])]))+'\n')
 
 
@@ -794,4 +803,4 @@ if __name__=="__main__":
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
 
     # export selection coefficients to file as supplementary info
-    export_selection_coefficients(data, synnonsyn, args.subtype)
+    export_selection_coefficients(data, synnonsyn, args.subtype, reference)

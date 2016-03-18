@@ -333,12 +333,13 @@ def correlation_vs_npat(pheno, region, data, reference):
     return within_cross_correlation
 
 
-def PhenoCorr_vs_Npat(pheno, data, figname=None):
+def PhenoCorr_vs_Npat(pheno, data, figname=None, label_str=''):
     '''
     calculate cross-sectional and within patient entropy correlations
     for many subsets of patients and plot the average rank correlation
     against the number of patients used in the within patient average
     '''
+    from util import add_panel_label
     for region in ['gag', 'pol', 'vif', 'nef']:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         xsS_within_corr = correlation_vs_npat(pheno, region, data, reference)
@@ -346,10 +347,14 @@ def PhenoCorr_vs_Npat(pheno, data, figname=None):
         avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
         std_corr = [np.std(xsS_within_corr[i]) for i in npats]
         plt.errorbar(np.array([1.0/i for i in npats]), y=avg_corr,yerr=std_corr, label=region)
-    plt.legend()
-    plt.ylabel('within entropy/'+pheno+' correlation', fontsize=fs)
+    plt.legend(fontsize=fs)
+    pheno_label = 'intra-patient/global entropy' if pheno=='entropy' \
+                    else 'intra-patient entropy/'+pheno
+    plt.ylabel(pheno_label+' correlation', fontsize=fs)
     plt.xlabel('1/number of patients', fontsize=fs)
     plt.xlim(0,1.1)
+    plt.tick_params(labelsize=fs*0.8)
+    add_panel_label(plt.gca(), label_str, x_offset=-0.10)
     plt.tight_layout()
     if figname is not None:
         for ext in ['png', 'svg', 'pdf']:
@@ -667,6 +672,8 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates, subtype):
             return s
 
     for region in data['af_by_pat']:
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
+        ref_seq = reference.seq.seq.translate()
         sel_array = selection_coefficients_per_site(region, data,
                             total_nonsyn_mutation_rates, nbootstraps=100)
         selcoeff={}
@@ -675,10 +682,11 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates, subtype):
 
         with open('../data/'+region+'_selection_coefficients_st_'+subtype+'.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
-            selfile.write('# position\tlower quartile\tmedian\tupper quartile\n')
+            selfile.write('\t'.join(['# position','consensus', reference.refname,
+                                    'lower quartile','median','upper quartile'])+'\n')
 
             for pos in xrange(selcoeff[25].shape[0]):
-                selfile.write('\t'.join(map(str,[pos+1]+
+                selfile.write('\t'.join(map(str,[pos+1, reference.consensus[pos], ref_seq[pos]]+
                         [sel_out(selcoeff[q][pos]) for q in [25, 50, 75]]))+'\n')
 
 def plot_drug_resistance_mutation_trajectories(pcode):
@@ -719,9 +727,9 @@ if __name__=="__main__":
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             #patient_codes = ['p2','p3','p5','p8','p9','p10','p11'] # subtype B only
-            patient_codes = ['p2','p3','p4', 'p5','p7', 'p8','p9','p10', 'p11'] # patients
+            patient_codes = ['p2','p3', 'p5','p7', 'p8','p9','p10', 'p11'] # patients
         else:
-            patient_codes = ['p1','p2','p3','p4', 'p5','p6','p7', 'p8','p9','p10', 'p11'] # patients
+            patient_codes = ['p1','p2','p3', 'p5','p6','p7', 'p8','p9','p10', 'p11'] # patients
             #patient_codes = ['p1','p2','p3','p5','p6','p8','p9','p10', 'p11'] # patients
         data = collect_data(patient_codes, regions, args.subtype)
         with gzip.open(fn, 'w') as ofile:
