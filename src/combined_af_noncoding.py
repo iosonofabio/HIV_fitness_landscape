@@ -43,24 +43,23 @@ regions = ['genomewide', 'gag', 'nef']
 plt.ion()
 
 features = {
-    'polyA':[(514,557)],
-    'U5':[(558,570)],
-    'U5 stem':[(588,596),(624,631)],
-    'PBS':[(636,654)],
-    'interferon-stimulated response':[(655,674)],
-    'PSI SL1-4':[(691, 735), (736, 755), (766,779), (790, 811)],
-    'frame shift':[(2086,2093),(2101,2126)],
+    'polyA':[(514,557)], # from LANL HXB2 annotation
+    'U5':[(558,570)],    # from LANL, ref 10.1126/science.1210460
+    'U5 stem':[(588,596),(624,631)],  # from LANL,
+    'PBS':[(636,654)],  # from LANL,
+    'interferon-stimulated response':[(655,674)],  # from LANL,
+    'PSI SL1-4':[(691, 735), (736, 755), (766,779), (790, 811)],  # from LANL,
+    'frame shift':[(2086,2093),(2101,2126)],  # from LANL,
     # RRE extracted from Siegfried et al NL4-3 -> HXB2 coordinates + 454 since their NL4-3 starts at TAR
     'RRE':[ (7780, 7792), (7796, 7805), (7808, 7813),(7817, 7825),(7829, 7838),(7846, 7853),
             (7856, 7863), (7865, 7872), (7875, 7880), (7886, 7892), (7901, 7913),
             (7916, 7928), (7931, 7940),(7948, 7957),(7962, 7972),(7975, 8003)],
-    'polypurine':[(9069,9094)],
-    'TCF-1alpha':[(9400,9415)],
-    'NK-kappa B1':[(9448,9459)],
-    'SP1':[(9462,9472),(9473,9483),(9483,9494)],
-    'TATA':[(9512,9517)],
-    'TAR':[(9538,9601)],
-    'combined':[(9400,9415), (9448,9459),(9462,9472),(9473,9483),(9483,9494),(9512,9517),(9538,9601) ]
+    'polypurine':[(9069,9094)],  # from LANL,
+    'TCF-1alpha':[(9400,9415)],  # from LANL,
+    'NK-kappa B1':[(9448,9459)],  # from LANL,
+    'SP1':[(9462,9472),(9473,9483),(9483,9494)],  # from LANL,
+    'TATA':[(9512,9517)],  # from LANL,
+    'TAR':[(9538,9601)],  # from LANL,
 }
 
 def plot_selection_coefficients_along_genome(start, stop, feature_names,
@@ -127,7 +126,7 @@ def add_pairing_to_reference(reference):
                                                 siegfried.loc[:,'probability'])
 
     # siegfried et al pairing probabilities are measured for and NL4-3 sequence
-    # translate them to the reference in question (HXB2) 
+    # translate them to the reference in question (HXB2)
     hxb2_pp = np.zeros(len(reference.seq))
     rt = ReferenceTranslator(ref1 = reference.refname, ref2='NL4-3')
     for i, p in enumerate(pp):
@@ -157,7 +156,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.12, 'gag', fontsize=fs*0.8, horizontalalignment='right')
 
-    # frame shift region -- no syn fitness cost here since this is in an overlap 
+    # frame shift region -- no syn fitness cost here since this is in an overlap
     start, stop = 2050, 2150
     feature_names = ['frame shift']
     ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
@@ -232,9 +231,9 @@ def shape_vs_fitness(data, minor_af, reference, ws=100, fname=None):
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
             plt.savefig(fname+ext)
-            
-    
-                        
+
+
+
 # Script
 if __name__=="__main__":
 
@@ -301,4 +300,4 @@ if __name__=="__main__":
 
 
     shape_vs_fitness(data, minor_af, reference, ws=100)
-    
+
