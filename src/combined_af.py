@@ -162,7 +162,7 @@ def af_average(afs):
     return tmp_afs
 
 
-def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5):
+def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5, synnonsyn=True):
     '''
     produce weighted averages of allele frequencies for all late samples in each patients
     restrict to sites that don't sweep and have limited diversity as specified by max_div
@@ -171,13 +171,18 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
     combined_af_by_pat = {}
     syn_nonsyn_by_pat={}
     syn_nonsyn_by_pat_unconstrained={}
-    region_start = int(reference.annotation[region].location.start)
+    if region=="genomewide":
+        region_start = 0
+        L = len(reference.seq)
+    else:
+        region_start = int(reference.annotation[region].location.start)
+        L = len(reference.annotation[region])
     for pi, p in enumerate(patients):
         pcode= p.name
         print("averaging ",pcode," region ",region)
         try:
             pcode= p.name
-            combined_af_by_pat[pcode] = np.zeros((6, len(reference.annotation[region])))
+            combined_af_by_pat[pcode] = np.zeros((6, L))
             print(pcode, p.Subtype)
             aft = p.get_allele_frequency_trajectories(region, cov_min=cov_min, error_rate = ERR_RATE, type='nuc')
 
@@ -190,12 +195,13 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5)
             rare = ((aft[:,:4,:]**2).sum(axis=1).min(axis=0)>max_div)[patient_to_subtype[:,2]]
             final = aft[-1].argmax(axis=0)[patient_to_subtype[:,2]]
 
-            syn_nonsyn_by_pat[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
-            syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
-                (p.get_syn_mutations(region, mask_constrained=True).sum(axis=0)>1)[patient_to_subtype[:,2]]
-            syn_nonsyn_by_pat_unconstrained[pcode] = np.zeros(len(reference.annotation[region]), dtype=int)
-            syn_nonsyn_by_pat_unconstrained[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
-                (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
+            if synnonsyn:
+                syn_nonsyn_by_pat[pcode] = np.zeros(L, dtype=int)
+                syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
+                    (p.get_syn_mutations(region, mask_constrained=True).sum(axis=0)>1)[patient_to_subtype[:,2]]
+                syn_nonsyn_by_pat_unconstrained[pcode] = np.zeros(L, dtype=int)
+                syn_nonsyn_by_pat_unconstrained[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
+                    (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
             for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
                 if ysi<SAMPLE_AGE_CUTOFF:
                     continue
@@ -699,7 +705,7 @@ def export_selection_coefficients(data, synnonsyn, subtype, reference):
                             +[int(synnonsyn[region][pos])]))+'\n')
 
 
-def collect_data(patient_codes, regions, reference):
+def collect_data(patient_codes, regions, reference, synnonsyn=True):
     '''
     loop over regions and produce a dictionary that contains the frequencies,
     syn/nonsyn designations and mutation rates
@@ -717,10 +723,14 @@ def collect_data(patient_codes, regions, reference):
         p = Patient.load(pcode)
         patients.append(p)
     for region in regions:
+        if region=="genomewide":
+            region_seq = "".join(reference.consensus)
+        else:
+            region_seq = reference.annotation[region].extract("".join(reference.consensus))
         combined_af_by_pat[region], syn_nonsyn_by_pat[region], syn_nonsyn_by_pat_unconstrained[region] \
-            = collect_weighted_afs(region, patients, reference)
-        consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc!='-' else np.nan for nuc in
-                            reference.annotation[region].extract("".join(reference.consensus))])
+            = collect_weighted_afs(region, patients, reference, synnonsyn=synnonsyn)
+        consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc!='-' else np.nan
+                                                    for nuc in region_seq])
 
     return {'af_by_pat': combined_af_by_pat,
             'mut_rate': consensus_mutation_rate,
