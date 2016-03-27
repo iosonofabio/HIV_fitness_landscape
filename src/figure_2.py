@@ -39,8 +39,8 @@ def load_data_saturation():
 
 def load_data_KL():
     '''Load data from Vadim's KL approach'''
-    S_center = np.loadtxt('../figures/Vadim/smuD_KL_quant_medians.txt')
-    s_mean, s_std = np.loadtxt('../figures/Vadim/smuD_KLmu_multi_boot.txt')[:,:-2]
+    S_center = np.loadtxt('../data/genomewide_smuD_KL_quant_medians.txt')
+    s_mean, s_std = np.loadtxt('../data/genomewide_smuD_KLmu_multi_boot.txt')[:,:-2]
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
