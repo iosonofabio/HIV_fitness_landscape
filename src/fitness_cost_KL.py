@@ -24,21 +24,6 @@ cols_Fabio = ['b','c','g','y','r','m']
 cols = ['b','g','r','c','m','y','k','b','g','r']
 outdir_name = '../data/'
 
-
-# Functions
-def covariance(p_ka):
-    '''Covariance matrix and correlation coefficient
-
-    Input parameters:
-    p_ka - nucleotide frequencies by site by time point
-
-    Returns:
-    time-covariance matrix
-    '''
-    pmean_k = p_ka.mean(axis=1); L = p_ka.shape[1]
-    return (p_ka - np.tile(pmean_k,(L,1)).T).dot(p_ka.T - np.tile(pmean_k,(L,1)))/(L-1)
-
-
 def fit_upper_multipat(xk_q_all, tk_all, LL=None):
     '''Fitting the quantile data with a linear law
 
@@ -48,7 +33,7 @@ def fit_upper_multipat(xk_q_all, tk_all, LL=None):
     LL - number of nucleotdies in the quantile for each patient
 
     Returns:
-    slope (mutaion rate)
+    slope (mutation rate)
     '''
 
     def fit_upper_chi2(mu):
@@ -128,7 +113,7 @@ def KLfit_multipat_mu(Ckq_q_all, xk_q_all, tk_all, mu):
 
 
 def patient_preprocessing(pat_name,Squant, div = False, outliers = True, xcut = 0.0,
-                          xcut_up = 0.):
+                          xcut_up = 0., cov_min=100):
     '''Load patient data, remove outliers and return average frequencies by
     timepoint and covariances
 
@@ -146,26 +131,30 @@ def patient_preprocessing(pat_name,Squant, div = False, outliers = True, xcut = 
     PAT = Patient.load(pat_name)
     tt = PAT.times()
     map_to_ref = PAT.map_to_external_reference(gen_region)
-    freqs = PAT.get_allele_frequency_trajectories(gen_region)[:,:,map_to_ref[:,2]]
-#    if np.count_nonzero(freqs.mask) > 0:
-#        print 'non-zero mask in ' + pat_name + ': removing ' +\
-#        str(np.count_nonzero(freqs.mask.sum(axis=2).sum(axis=1)>0)) +\
-#        ' time points out of ' + str(tt.shape[0])
-#        tt = tt[np.where(freqs.mask.sum(axis=2).sum(axis=1) == 0)]
-#        freqs = freqs[np.where(freqs.mask.sum(axis=2).sum(axis=1) == 0)[0],:,:]
+    # load mutation frequencies, retain only positions that map_to_ref
+    freqs = PAT.get_allele_frequency_trajectories(gen_region, cov_min=cov_min)[:,:,map_to_ref[:,2]]
+    gp120 = np.zeros(len(ref.seq), dtype=bool)
+    gp120[[x for x in ref.annotation['gp120']]]=True
 
 
+    # determine ancestral indices -> argmax in first time point
+    anc_index = np.argmax(freqs[0,:4,:],axis=0)
+    anc_freq = freqs[:,anc_index,range(anc_index.shape[0])]
+
+    # calculate the mutation frequency change
     dt_k = np.array([tt[0]] + list(np.diff(tt)))
-    jjnuc0 = np.argmax(freqs[0,:4,:],axis=0)
-    anc_freq = freqs[:,jjnuc0,range(jjnuc0.shape[0])]
     xave = np.sum(dt_k * anc_freq.T, axis=1) /np.sum(dt_k * (~anc_freq.mask).T, axis=1)
-    good_positions = (xave <= 1.-xcut)*(xave > xcut_up)*(jjnuc0==ref.get_consensus_indices_in_patient_region(map_to_ref))
+    # determine positions where the initial state agrees with the consensus states
+    good_positions = (anc_index==ref.get_consensus_indices_in_patient_region(map_to_ref))
+    good_positions = good_positions&(ref.get_ungapped()[map_to_ref[:,0]])
+    good_positions = good_positions&(~gp120[map_to_ref[:,0]])
+    #good_positions = (xave <= 1.-xcut)*(xave > xcut_up)*(anc_index==ref.get_consensus_indices_in_patient_region(map_to_ref))
 
     xka_q = []
     for jq in xrange(q):
         idx_ref = Squant[jq]['ind']
-        idx_PAT = np.array([i for i,jref in enumerate(map_to_ref[:,0])
-                            if (jref in idx_ref) and good_positions[i]])
+        # reference positions are in map_to_ref[:,0]
+        idx_PAT = np.in1d(map_to_ref[:,0], idx_ref)&good_positions
 
         if div:
             x_ka = (1.- anc_freq[:,idx_PAT])*anc_freq[:,idx_PAT]
@@ -177,8 +166,8 @@ def patient_preprocessing(pat_name,Squant, div = False, outliers = True, xcut = 
     if outliers:
         xka_q_new = []
         for jq, x_ka0 in enumerate(xka_q):
-            nonout = np.all(x_ka0<0.5, axis=0)
-            xka_q_new.append(xka0[:,nonout])
+            nonout = np.all(x_ka0<=0.5, axis=0)
+            xka_q_new.append(x_ka0[:,nonout])
         xka_q = list(xka_q_new)
 
     return xka_q, tt
@@ -226,7 +215,6 @@ if __name__=="__main__":
             Lq.append(x_ka.shape[1])
             xk_q[jq,:] = x_ka.mean(axis=1)
             Ckq_q[jq,:,:] = np.ma.cov(x_ka)
-            print('Covariance deviation:', np.sum((np.ma.cov(x_ka)-covariance(x_ka))**2))
 
         xk_q_all.append(xk_q)
         Ckq_q_all.append(Ckq_q)
@@ -236,7 +224,7 @@ if __name__=="__main__":
     smuD_KL_q_multipat_mu = np.zeros(q+2)
     #smuD_KL_q_multipat_mu[q] = fit_upper_multipat(xk_q_all,tt_all)
     smuD_KL_q_multipat_mu[q] = 1.2e-5 # fixed mutation rate.
-    ii_sD = [i for i in xrange(q+2) if i != q]
+    ii_sD = range(q)+ [q+1]
     smuD_KL_q_multipat_mu[ii_sD] = KLfit_multipat_mu(Ckq_q_all,xk_q_all,tt_all,smuD_KL_q_multipat_mu[q])
 
     # Saving fitness coefficients and mutation rates
