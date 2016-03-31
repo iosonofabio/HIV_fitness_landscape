@@ -30,6 +30,7 @@ from combined_af import process_average_allele_frequencies, draw_genome
 from combined_af import af_average, load_mutation_rates, collect_data, running_average
 
 
+
 # Globals
 ERR_RATE = 2e-3
 WEIGHT_CUTOFF = 500
@@ -62,6 +63,9 @@ features = {
     'TAR':[(9538,9601)],  # from LANL,
 }
 
+
+
+# Functions
 def plot_selection_coefficients_along_genome(start, stop, feature_names,
                             data, minor_af,reference,synnonsyn=None,
                             ws=30, wsp=30, pheno=None, ax=None):
@@ -116,6 +120,7 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
     ax.set_xlim(start, stop)
     return ax
 
+
 def add_pairing_to_reference(reference):
     from hivevo.external import load_pairing_probability_NL43
     from hivevo.HIVreference import ReferenceTranslator
@@ -133,7 +138,11 @@ def add_pairing_to_reference(reference):
         hxb2_pp[rt.translate(i, 'NL4-3')[1]]=p
     reference.pp = hxb2_pp
 
+
 def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
+    '''Plot fitness cost at noncoding features'''
+    from util import add_panel_label
+
     fig, axs = plt.subplots(1, 3, sharey=True, figsize =(10,5),
                             gridspec_kw={'width_ratios':[4, 1, 2]})
 
@@ -187,6 +196,9 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.plot([reference.annotation["LTR3'"].location.start,stop],
             1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.25, "LTR3'", fontsize=fs*0.8, horizontalalignment='right')
+
+
+    add_panel_label(ax, 'B', x_offset=-0.2)
 
     plt.tight_layout()
 

@@ -581,7 +581,12 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
 
 
 def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference, ws=30):
-    '''Plot the fitness costs along the genome'''
+    '''Plot the fitness costs along the genome
+    
+    We have the fitness costs per site, but we only plot a running average over
+    30 bp as a smoothing, for visual clarity. Later on we export the actual
+    per-site fitness costs to file.
+    '''
     from util import add_panel_label
 
     all_sel_coeff = []
@@ -668,6 +673,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
 
 
 def export_selection_coefficients(data, synnonsyn, subtype, reference):
+    '''Calculate and export per-site fitness costs (no average)''' 
     from scipy.stats import scoreatpercentile
     def sel_out(s):
         if s<0.001:
