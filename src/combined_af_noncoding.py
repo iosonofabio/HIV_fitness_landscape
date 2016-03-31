@@ -68,7 +68,8 @@ features = {
 # Functions
 def plot_selection_coefficients_along_genome(start, stop, feature_names,
                             data, minor_af,reference,synnonsyn=None,
-                            ws=30, wsp=30, pheno=None, ax=None):
+                            ws=30, wsp=30, pheno=None, ax=None,
+                            ybar=0.13, ytext=0.145):
     '''Plot the fitness costs along the genome'''
     from util import add_panel_label
 
@@ -105,15 +106,21 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
                     c=cols[1], ls='--')
 
     # add features
+    colors = sns.color_palette('husl', 7)
     for fi,feat in enumerate(feature_names):
         elements = features[feat]
         # add features as horizontal bars
         all_pos = []
+        color = colors[(2 * fi) % len(colors)]
         for element in elements:
             all_pos.extend(element)
-            ax.plot(np.array(element)-1, [0.12,0.12], lw=3, c=cols[(2+fi)%len(cols)])
-        ax.text((elements[0][0]+elements[-1][1])*0.5, 0.13, feat,
-                         horizontalalignment='center', fontsize=fs*0.6)
+            ax.plot(np.array(element)-1, [ybar, ybar], lw=3,
+                    color=color)
+        ax.text((elements[0][0]+elements[-1][1])*0.5,
+                ytext * (1.0 + 0.26 * ((fi % 2) == 1)),
+                feat,
+                horizontalalignment='center',
+                fontsize=fs*0.8)
 
     ax.set_yscale('log')
     ax.tick_params(labelsize=fs*0.8)
@@ -143,6 +150,9 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     '''Plot fitness cost at noncoding features'''
     from util import add_panel_label
 
+    ymax = 0.25
+    ymin = 0.0005
+
     fig, axs = plt.subplots(1, 3, sharey=True, figsize =(10,5),
                             gridspec_kw={'width_ratios':[4, 1, 2]})
 
@@ -155,7 +165,8 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
                                      ws=8, wsp=1, ax=axs[0])
     # add label and dimension to left-most axis, all other are tied to this one
     ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
-    ax.set_ylim(0.0005, 0.15)
+    ax.set_ylim(ymin, ymax)
+    add_panel_label(ax, 'B', x_offset=-0.15)
 
     ax.plot([start,reference.annotation["LTR5'"].location.end],
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
@@ -164,6 +175,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.plot([reference.annotation['gag'].location.start, stop],
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.12, 'gag', fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_ylim(ymin, ymax)
 
     # frame shift region -- no syn fitness cost here since this is in an overlap
     start, stop = 2050, 2150
@@ -180,6 +192,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.25, 'pol', fontsize=fs*0.8, horizontalalignment='right')
     ax.set_xticks([2050, 2100,2150])
+    ax.set_ylim(ymin, ymax)
 
     # plot the 3' region
     start, stop = 9050, 9150
@@ -196,11 +209,12 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.plot([reference.annotation["LTR3'"].location.start,stop],
             1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.25, "LTR3'", fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_ylim(ymin, ymax)
 
-
-    add_panel_label(ax, 'B', x_offset=-0.2)
-
-    plt.tight_layout()
+    fig.text(0.5, 0.01, 'Position in HIV-1 reference (HXB2) [bp]',
+             ha='center',
+             fontsize=fs)
+    plt.tight_layout(rect=(0, 0.04, 1, 1))
 
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
@@ -290,7 +304,7 @@ if __name__=="__main__":
               regions, ' got:',data['mut_rate'].keys())
 
     # Average, annotate, and process allele frequencies
-    av = process_average_allele_frequencies(data, ['gag', 'nef','env'], nbootstraps=0,
+    av = process_average_allele_frequencies(data, ['gag', 'nef'], nbootstraps=0,
                                             synnonsyn=True)
     combined_af = av['combined_af']
     combined_entropy = av['combined_entropy']
@@ -308,7 +322,8 @@ if __name__=="__main__":
         synnonsyn['genomewide'][pos] = synnonsyn_unconstrained[gene]
 
     add_pairing_to_reference(reference)
-    plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname = '../figures/non_coding')
+    plot_non_coding_figure(data, minor_af, synnonsyn, reference,
+                           fname='../figures/figure_4B_'+args.subtype)
 
 
     shape_vs_fitness(data, minor_af, reference, ws=100)

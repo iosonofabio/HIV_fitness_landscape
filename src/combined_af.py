@@ -654,9 +654,9 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     ax.legend(loc=1, fontsize=fs, title=None)
 
     plt.tight_layout()
-    add_panel_label(ax, 'B', x_offset=-0.1)
+    #add_panel_label(ax, 'B', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/figure_4B_st_' + reference.subtype +'.'+ext)
+        fig.savefig('../figures/figure_S5_st_' + reference.subtype +'.'+ext)
 
 
 def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af):
