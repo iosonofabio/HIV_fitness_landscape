@@ -492,11 +492,13 @@ def selcoeff_confidence(region, data, fname=None):
         ind = which_quantile==i
         npoints = ind.sum()*sel_coeff_array.shape[0]
         ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
-        ax.hist(sel_coeff_array[:,ind].flatten(), weights =np.ones(npoints,dtype=float)/npoints,
-                bins=np.logspace(-3,-1,21), alpha=0.7, color=cols[i+3])
+        ax.hist(sel_coeff_array[:,ind].flatten(),
+                weights=np.ones(npoints,dtype=float)/npoints,
+                bins=np.logspace(-3, -1, 21),
+                alpha=0.7, color=cols[i+3])
     ax.set_xscale('log')
     ax.set_xlabel('selection coefficient', fontsize=fs)
-    ax.set_ylabel('uncertainty distribution', fontsize=fs)
+    ax.set_ylabel('normalized counts', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
 
     plt.tight_layout()

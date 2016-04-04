@@ -79,6 +79,11 @@ offsets = {
 
 
 # Functions
+def load_mutation_rates():
+    fn = '../data/mutation_rate.pickle'
+    return pd.read_pickle(fn)
+
+
 def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
     from Bio.Seq import CodonTable
     CT = CodonTable.standard_dna_table.forward_table
@@ -631,8 +636,10 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
 
     region='pol'
     pcodes = data['init_codon'][region].keys()
-    fig = plt.figure()
-    ax=plt.subplot(111)
+    
+    fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [1, 6]})
+    ax = axs[1]
+
     drug_afs_items = []
     mut_types = []
     drug_classes = ['PI', 'NRTI', 'NNRTI']
@@ -667,7 +674,8 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     ax.axhline(4e-5, c=(.3, .3, .3), lw=3, alpha=0.5)
 
     for ni, prot in enumerate(drug_classes):
-        plt.text(0.5*(mut_types[ni] + (mut_types[ni-1] if ni else 0))-0.5, 0.07, prot, fontsize=16, ha='center')
+        plt.text(0.5*(mut_types[ni] + (mut_types[ni-1] if ni else 0))-0.5, 0.12,
+                 prot, fontsize=16, ha='center')
 
     for mi in range(max(mut_types)):
         c = 0.5 + 0.2*(mi%2)
@@ -684,13 +692,40 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     afdr[afdr < 0.8e-4] = 0
     sns.stripplot(data=afdr, jitter=0.4, alpha=0.8, size=12, lw=1, edgecolor='white')
 
-    # Add the number of missing points at the bottom of the plot
-    dd = afdr.iloc[[0, 1, 2]].copy()
-    dd.index = ['x', 'freq', 'size']
+    # Add the number of missing points at the bottom of the plot, and the cost
+    # at the top
+    dd = afdr.iloc[[0, 1, 2, 3]].copy()
+    dd.index = ['x', 'freq', 'size', 'cost']
     dd.loc['x'] = np.arange(dd.shape[1])
     dd.loc['freq'] = 2e-5
     dd.loc['n'] = afdr.shape[0] - (afdr > 1e-4).sum(axis=0)
     dd.loc['size'] = dd.loc['n']**(1.4) + 13
+    dd.loc['cost'] = 1.0 / afdr.fillna(0).mean(axis=0)
+    # NOTE: the first 6 mutations are in PR, the rest in RT
+    import re
+    from Bio.Seq import translate
+    reference = HIVreference(refname='HXB2', load_alignment=False)
+    seq_PR = reference.annotation['PR'].extract(reference.seq)
+    seq_RT = reference.annotation['RT'].extract(reference.seq)
+    murate = load_mutation_rates()['mu']
+    for i, mut in enumerate(dd.T.index):
+        mr = 0
+        if i < 6:
+            seq_tmp = seq_PR
+        else:
+            seq_tmp = seq_RT
+        aa_from, pos, aas_to = re.sub('([A-Z])(\d+)([A-Z]+)', r'\1_\2_\3', mut).split('_')
+        cod = str(seq_tmp.seq[(int(pos) - 1) * 3: int(pos) * 3])
+        for pos_cod in xrange(3):
+            for nuc in ['A', 'C', 'G', 'T']:
+                codmut = list(cod)
+                codmut[pos_cod] = nuc
+                codmut = ''.join(codmut)
+                if (codmut != cod) and (translate(cod) == aa_from) and (translate(codmut) in aas_to):
+                    mr += murate[cod[pos_cod]+'->'+nuc]
+
+        dd.loc['cost', mut] *= mr
+
     for im, (mutname, s) in enumerate(dd.T.iterrows()):
         ax.scatter(s['x'], s['freq'],
                    s=s['size']**2,
@@ -705,6 +740,19 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     plt.xticks(rotation=40)
     plt.ylabel('minor variant frequency', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
+
+    # Fitness cost at the top
+    ax1 = axs[0]
+    ax1.set_xlim(*ax.get_xlim())
+    ax1.set_xticks(ax.get_xticks() + 0.5)
+    ax1.set_xticklabels([])
+    ax1.set_ylim(1e-3, 1)
+    ax1.set_yticks([1e-3, 1e-2, 1e-1, 1])
+    ax1.set_yscale('log')
+    ax1.set_ylabel('cost', fontsize=fs)
+    for im, (mut, y) in enumerate(dd.loc['cost'].iteritems()):
+        ax1.bar(im - 0.5, y, 1, color=sns.color_palette('husl', afdr.shape[1])[im])
+
     plt.tight_layout()
 
     if fname is not None:
