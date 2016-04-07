@@ -340,6 +340,28 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
         fig.savefig('../figures/figure_1.'+ext)
 
 
+def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None):
+    '''Export the table of mutation rate coefficients to file'''
+    fn = '../data/mutation_rate.pickle'
+    out = {'mu': mu, 'dmulog10': dmulog10}
+    if muA is not None:
+        out['muA'] = muA
+    if dmuAlog10 is not None:
+        out['dmuAlog10'] = dmuAlog10
+
+    mu_out = pd.DataFrame(out)
+    mu_out.to_pickle(fn)
+
+    fn_tsv = '../data/mutation_rate.tsv'
+    out['log10mu'] = np.log10(out['mu'])
+    out['dlog10mu'] = out['dmulog10']
+    header = ['log10(mu [per day per site])', 'stddev(log10(mu [per day per site]))']
+    out[['log10mu', 'dlog10mu']].to_csv(fn_tsv,
+                                        sep='\t',
+                                        header=header,
+                                        float_format='%1.1f')
+    
+
 def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
     '''Collect data for the mutation rate estimate'''
     print('Collect data from patients')
@@ -455,9 +477,7 @@ if __name__ == '__main__':
     dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
 
     # Save results to file (used in Figure 2)
-    fn = '../data/mutation_rate.pickle'
-    mu_out = pd.DataFrame({'mu': mu, 'muA': muA, 'dmulog10': dmulog10, 'dmuAlog10': dmuAlog10})
-    mu_out.to_pickle(fn)
+    export_mutation_rate_matrix(mu, dmulog10, muA, dmuAlog10)
 
     # Plot Figure 1
     plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)

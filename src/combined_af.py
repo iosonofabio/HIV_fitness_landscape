@@ -493,7 +493,7 @@ def selcoeff_confidence(region, data, fname=None):
         npoints = ind.sum()*sel_coeff_array.shape[0]
         ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
         ax.hist(sel_coeff_array[:,ind].flatten(),
-                weights=np.ones(npoints,dtype=float)/npoints,
+                weights=np.ones(npoints,dtype=float) / npoints,
                 bins=np.logspace(-3, -1, 21),
                 alpha=0.7, color=cols[i+3])
     ax.set_xscale('log')
@@ -677,13 +677,21 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
 def export_selection_coefficients(data, synnonsyn, subtype, reference):
     '''Calculate and export per-site fitness costs (no average)''' 
     from scipy.stats import scoreatpercentile
+
     def sel_out(s):
+        '''Output formatter for selection coefficients'''
+        def round_sig(x, sig=2):
+            '''Round selection coefficient to 2 significant digits'''
+            return round(x, sig - int(np.floor(np.log10(x))) - 1)
+
         if s<0.001:
             return '<0.001'
         elif s>0.1:
             return '>0.1'
-        else:
+        elif np.isnan(s):
             return s
+        else:
+            return round_sig(s)
 
     for region in data['af_by_pat']:
         av = process_average_allele_frequencies(data, [region],
