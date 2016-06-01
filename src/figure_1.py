@@ -308,7 +308,7 @@ def plot_mutation_rate_graph(mu, ax=None):
     return fig, ax
 
 
-def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
+def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10,suffix=''):
     '''Plot figure 1 of the paper'''
     print('Plot Figure 1')
     fig = plt.figure(figsize=(12, 11))
@@ -337,12 +337,12 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10):
 
 
     for ext in ['svg', 'png', 'pdf']:
-        fig.savefig('../figures/figure_1.'+ext)
+        fig.savefig('../figures/figure_1'+suffix+'.'+ext)
 
 
-def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None):
+def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None, suffix=''):
     '''Export the table of mutation rate coefficients to file'''
-    fn = '../data/mutation_rate.pickle'
+    fn = '../data/mutation_rate'+suffix+'.pickle'
     out = {'mu': mu, 'dmulog10': dmulog10}
     if muA is not None:
         out['muA'] = muA
@@ -352,17 +352,18 @@ def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None):
     mu_out = pd.DataFrame(out)
     mu_out.to_pickle(fn)
 
-    fn_tsv = '../data/mutation_rate.tsv'
-    out['log10mu'] = np.log10(out['mu'])
-    out['dlog10mu'] = out['dmulog10']
+    fn_tsv = '../data/mutation_rate'+suffix+'.tsv'
+    mu_out['log10mu'] = np.log10(out['mu'])
+    mu_out['dlog10mu'] = out['dmulog10']
     header = ['log10(mu [per day per site])', 'stddev(log10(mu [per day per site]))']
-    out[['log10mu', 'dlog10mu']].to_csv(fn_tsv,
+    mu_out[['log10mu', 'dlog10mu']].to_csv(fn_tsv,
                                         sep='\t',
                                         header=header,
-                                        float_format='%1.1f')
-    
+                                        float_format='%1.2f')
 
-def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
+
+def collect_data(patients, cov_min=100, refname='HXB2', subtype='any',
+                 entropy_threshold=0.1, excluded_proteins=[]):
     '''Collect data for the mutation rate estimate'''
     print('Collect data from patients')
 
@@ -387,6 +388,9 @@ def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
             # Keep only sites within ONE protein
             if len(fead['protein_codon']) != 1:
                 continue
+            # skip if protein is to be excluded
+            if fead['protein_codon'][0][0] in excluded_proteins:
+                continue
 
             # Exclude codons with gaps
             pc = fead['protein_codon'][0][-1]
@@ -409,7 +413,7 @@ def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
 
                 # Keep only high-entropy sites
                 S_pos = ref.entropy[comap.loc[pos]]
-                if S_pos < 0.1:
+                if S_pos < entropy_threshold:
                     continue
 
                 # Keep only synonymous alleles
@@ -427,6 +431,7 @@ def collect_data(patients, cov_min=100, refname='HXB2', subtype='any'):
                     datum = {'time': t,
                              'af': af_nuc,
                              'pos': pos,
+                             'refpos': comap.loc[pos],
                              'protein': fead['protein_codon'][0][0],
                              'pcode': pcode,
                              'mut': mut,
@@ -448,36 +453,44 @@ if __name__ == '__main__':
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data from allele counts")
     args = parser.parse_args()
+    for excluded_proteins in [[], ['gp120']]:
+        for thres in [0.01, 0.03, 0.1, 0.3, 0.5]:
+            suffix = '_'+'_'.join([str(thres)]+excluded_proteins)
 
-    # Intermediate data are saved to file for faster access later on
-    fn = '../data/mutation_rate_data.pickle'
-    patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
-    if not os.path.isfile(fn) or args.regenerate:
-        data = collect_data(patients)
-        try:
-            data.to_pickle(fn)
-            print('Data saved to file:', os.path.abspath(fn))
-        except IOError:
-            print('Could not save data to file:', os.path.abspath(fn))
-    else:
-        data = pd.read_pickle(fn)
+            # Intermediate data are saved to file for faster access later on
+            fn = '../data/mutation_rate_data'+suffix+'.pickle'
+            patients = ['p1', 'p2','p5', 'p6', 'p8', 'p9', 'p11']
+            if not os.path.isfile(fn) or args.regenerate:
+                data = collect_data(patients, entropy_threshold=thres, excluded_proteins=excluded_proteins)
+                try:
+                    data.to_pickle(fn)
+                    print('Data saved to file:', os.path.abspath(fn))
+                except IOError:
+                    print('Could not save data to file:', os.path.abspath(fn))
+            else:
+                data = pd.read_pickle(fn)
 
-    # Make time bins
-    t_bins = np.array([0, 500, 1000, 1750, 3000], int)
-    t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
-    add_binned_column(data, t_bins, 'time')
-    data['time_binc'] = t_binc[data['time_bin']]
+            # Make time bins
+            t_bins = np.array([0, 500, 1000, 1750, 3000], int)
+            t_binc = 0.5 * (t_bins[:-1] + t_bins[1:])
+            add_binned_column(data, t_bins, 'time')
+            data['time_binc'] = t_binc[data['time_bin']]
 
-    # Get mutation rate with bootstrap error bars
-    mu,dmulog10 = get_mutation_matrix(data)
+            # save positions used for mutation rate estimation.
+            all_pos = np.array(np.unique(data['refpos']), dtype=int)
+            print(thres, excluded_proteins, '# positions', len(all_pos))
+            np.savetxt('../data/mutation_rate_positions'+suffix+'.txt', all_pos, fmt='%d')
 
-    # Compare to Abram et al 2010
-    tmp = get_mu_Abram2010(with_std=True)
-    muA = tmp['mu']
-    dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
+            # Get mutation rate with bootstrap error bars
+            mu,dmulog10 = get_mutation_matrix(data)
 
-    # Save results to file (used in Figure 2)
-    export_mutation_rate_matrix(mu, dmulog10, muA, dmuAlog10)
+            # Compare to Abram et al 2010
+            tmp = get_mu_Abram2010(with_std=True)
+            muA = tmp['mu']
+            dmuAlog10 = tmp['std'] / tmp['mu'] / np.log(10)
 
-    # Plot Figure 1
-    plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10)
+            # Save results to file (used in Figure 2)
+            export_mutation_rate_matrix(mu, dmulog10, muA, dmuAlog10, suffix=suffix)
+
+            # Plot Figure 1
+            plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10, suffix=suffix)

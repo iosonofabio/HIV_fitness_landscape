@@ -584,7 +584,7 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
 
 def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference, ws=30):
     '''Plot the fitness costs along the genome
-    
+
     We have the fitness costs per site, but we only plot a running average over
     30 bp as a smoothing, for visual clarity. Later on we export the actual
     per-site fitness costs to file.
@@ -675,7 +675,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
 
 
 def export_selection_coefficients(data, synnonsyn, subtype, reference):
-    '''Calculate and export per-site fitness costs (no average)''' 
+    '''Calculate and export per-site fitness costs (no average)'''
     from scipy.stats import scoreatpercentile
 
     def sel_out(s):
@@ -754,6 +754,32 @@ def collect_data(patient_codes, regions, reference, synnonsyn=True):
             'syn_by_pat_uc': syn_nonsyn_by_pat_unconstrained}
 
 
+def check_neutrality(patient_codes, reference, position_file):
+    # make distribution of selection coefficients used to estimate the neutral mutation rate
+    data = collect_data(patient_codes, ['genomewide'], reference, synnonsyn=False)
+    av = process_average_allele_frequencies(data, ['genomewide'], nbootstraps=0, synnonsyn=False)
+    combined_af = av['combined_af']
+    combined_entropy = av['combined_entropy']
+    minor_af = av['minor_af']
+
+    ind = (~np.isnan(minor_af['genomewide']))
+    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
+    s = np.array(slist)
+    s[s>=0.1] = 0.1
+    s[s<=0.001] = 0.001
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+
+    neutral_pos = np.array(np.loadtxt(position_file), dtype=int)
+    ind = (np.in1d(np.arange(minor_af['genomewide'].shape[0]), neutral_pos))&(~np.isnan(minor_af['genomewide']))
+    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
+    s = np.array(slist)
+    s[s>=0.1] = 0.1
+    s[s<=0.001] = 0.001
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+    plt.xscale('log')
+    plt.savefig
+    return s
+
 
 # Script
 if __name__=="__main__":
@@ -772,11 +798,11 @@ if __name__=="__main__":
     fn = '../data/avg_nucleotide_allele_frequency.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
-            patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only
-            #patient_codes = ['p2','p3', 'p4', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only
+            #patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only, no p4/p7
+            patient_codes = ['p2','p3', 'p5', 'p7', 'p8', 'p9','p10', 'p11'] # subtype B only, no p4
         else:
-            patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
-            #patient_codes = ['p1', 'p2','p3','p4', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients
+            #patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
+            patient_codes = ['p1', 'p2','p3', 'p5','p6','p7', 'p8', 'p9','p10', 'p11'] # patients, no p4
 
         data = collect_data(patient_codes, regions, reference)
         try:
@@ -830,3 +856,7 @@ if __name__=="__main__":
 
     # export selection coefficients to file as supplementary info
     export_selection_coefficients(data, synnonsyn, args.subtype, reference)
+
+    # check the neutrality of the positions used to determine the neutral mutation rate.
+    s = check_neutrality(patient_codes, reference, '../data/mutation_rate_positions_0.3_gp120.txt')
+
