@@ -131,6 +131,7 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
 def add_pairing_to_reference(reference):
     from hivevo.external import load_pairing_probability_NL43
     from hivevo.HIVreference import ReferenceTranslator
+    from parse_pairing_probabilities import load_shape
     siegfried = load_pairing_probability_NL43()
     pp = np.zeros(10000)
     pp[siegfried.index] = siegfried.loc[:, 'probability']
@@ -144,6 +145,17 @@ def add_pairing_to_reference(reference):
     for i, p in enumerate(pp):
         hxb2_pp[rt.translate(i, 'NL4-3')[1]]=p
     reference.pp = hxb2_pp
+
+    shape = load_shape()
+    shape_array = -999.0*np.ones_like(hxb2_pp)
+    field = ['1M7 SHAPE MaP', '1M6 SHAPE MaP', 'NMIA SHAPE MaP'][1]
+    for pos, val in shape.iterrows():
+        r, hxb2pos = rt.translate(pos, 'NL4-3')
+        if np.isnan(hxb2pos) or hxb2pos<0:
+            continue
+        shape_array[hxb2pos] = val[field]
+    reference.shape_values = np.ma.array(shape_array, mask=shape_array<-100)
+
 
 
 def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
@@ -221,7 +233,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             plt.savefig(fname+ext)
 
 
-def shape_vs_fitness(data, minor_af, reference, ws=100, fname=None):
+def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None):
     '''
     calculate the correlation between the pairing probability provided
     by siegfried et al and our estimated selection coefficients
@@ -233,17 +245,23 @@ def shape_vs_fitness(data, minor_af, reference, ws=100, fname=None):
     sc = (data['mut_rate'][region]/(af_cutoff+minor_af[region]))
     sc[sc>0.1] = 0.1
     sc[sc<0.001] = 0.001
+
+    ind = ~np.isnan(sc)
+    print("overall correlation:", spearmanr(sc[ind], shape_data[ind]))
+    ind = (~np.isnan(sc))&(synnonsyn)
+    print("synonymous only correlation:", spearmanr(sc[ind], shape_data[ind]))
+
     pp_fitness_correlation = []
     for ii in range(len(sc)-ws):
-        ind = ~np.isnan(sc[ii:ii+ws])
+        ind = (~np.isnan(sc[ii:ii+ws]))&synnonsyn[ii:ii+ws]
         cc=0
-        if ind.sum()>ws*0.5:
-            cc = np.corrcoef(reference.pp[ii:ii+ws][ind], sc[ii:ii+ws][ind])[0,1]
+        if ind.sum()>ws*0.2:
+            cc = np.corrcoef(shape_data[ii:ii+ws][ind], sc[ii:ii+ws][ind])[0,1]
         pp_fitness_correlation.append(cc)
-    axs[0].plot(np.arange(len(pp_fitness_correlation))+ws*0.5, pp_fitness_correlation)
-    axs[0].set_ylabel('fitness cost/RNA pairing correlation in '+str(ws)+'base intervals')
+    axs[0].plot(np.arange(len(sc)-ws)+ws*0.5, pp_fitness_correlation)
+    axs[0].set_ylabel('fitness cost/RNA pairing correlation in '+str(ws)+' base windows')
     # add genome annotation
-    regs = ['gag', 'pol', 'nef', 'env', 'RRE', "LTR5'", "LTR3'", 'V1', 'V2', 'V3', 'V5']
+    regs = ['gag', 'pol', 'vif', 'tat','vpu','nef', 'env', 'RRE', "LTR5'", "LTR3'", 'V1', 'V2', 'V3', 'V5']
     annotations = {k: val for k, val in reference.annotation.iteritems() if k in regs}
     annotations = draw_genome(annotations, axs[1])
     axs[1].set_axis_off()
@@ -257,6 +275,29 @@ def shape_vs_fitness(data, minor_af, reference, ws=100, fname=None):
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
             plt.savefig(fname+ext)
+
+
+def check_neutrality(minor_af, mut_rates, position_file):
+    region='genomewide'
+    # make distribution of selection coefficients used to estimate the neutral mutation rate
+    ind = (~np.isnan(minor_af['genomewide']))
+    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
+    s = np.array(slist)
+    s[s>=0.1] = 0.1
+    s[s<=0.001] = 0.001
+    plt.figure()
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+
+    neutral_pos = np.array(np.loadtxt(position_file), dtype=int)
+    ind = (np.in1d(np.arange(minor_af['genomewide'].shape[0]), neutral_pos))&(~np.isnan(minor_af['genomewide']))
+    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
+    s = np.array(slist)
+    s[s>=0.1] = 0.1
+    s[s<=0.001] = 0.001
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+    plt.xscale('log')
+    plt.savefig('../figures/neutral_set_comparison.pdf')
+    return s
 
 
 
@@ -277,20 +318,20 @@ if __name__=="__main__":
     fn = '../data/avg_noncoding_allele_frequency.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
-            patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only
+            patient_codes = ['p2','p3', 'p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         else:
-            patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
+            patient_codes = ['p1', 'p2','p3','p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
 
         # gag and nef are loaded since they overlap with relevnat non-coding structures
         # and we need to know which positions have synonymous mutations
-        data = collect_data(patient_codes, ['gag', 'nef'], reference, synnonsyn=True)
+        data = collect_data(patient_codes, ['gag', 'nef', 'env', 'vif','pol'], reference, synnonsyn=True)
         tmp_data = collect_data(patient_codes, ['genomewide'], reference, synnonsyn=False)
         for k in data:
             data[k].update(tmp_data[k])
 
         try:
-            with gzip.open(fn, 'w') as ofile:
-                cPickle.dump(data, ofile)
+            #with gzip.open(fn, 'w') as ofile:
+            #    cPickle.dump(data, ofile)
             print('Data saved to file:', os.path.abspath(fn))
         except IOError:
             print('Could not save data to file:', os.path.abspath(fn))
@@ -304,7 +345,7 @@ if __name__=="__main__":
               regions, ' got:',data['mut_rate'].keys())
 
     # Average, annotate, and process allele frequencies
-    av = process_average_allele_frequencies(data, ['gag', 'nef'], nbootstraps=0,
+    av = process_average_allele_frequencies(data, ['gag', 'nef', 'env', 'vif','pol'], nbootstraps=0,
                                             synnonsyn=True)
     combined_af = av['combined_af']
     combined_entropy = av['combined_entropy']
@@ -317,14 +358,18 @@ if __name__=="__main__":
     combined_entropy.update(av['combined_entropy'])
     minor_af.update(av['minor_af'])
     synnonsyn['genomewide'] = np.ones_like(minor_af['genomewide'], dtype=bool)
-    for gene in ['gag', 'nef']:
+    synnonsyn_unconstrained['genomewide'] = np.ones_like(minor_af['genomewide'], dtype=bool)
+    for gene in ['gag', 'nef', 'env', 'vif','pol']:
         pos = [x for x in reference.annotation[gene]]
-        synnonsyn['genomewide'][pos] = synnonsyn_unconstrained[gene]
+        synnonsyn_unconstrained['genomewide'][pos] = synnonsyn_unconstrained[gene]
+        synnonsyn['genomewide'][pos] = synnonsyn[gene]
 
     add_pairing_to_reference(reference)
-    plot_non_coding_figure(data, minor_af, synnonsyn, reference,
+    plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
                            fname='../figures/figure_4B_'+args.subtype)
 
+    shape_vs_fitness(data, minor_af, reference.pp, synnonsyn_unconstrained['genomewide'], ws=100)
 
-    shape_vs_fitness(data, minor_af, reference, ws=100)
+    # check the neutrality of the positions used to determine the neutral mutation rate.
+    s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
 

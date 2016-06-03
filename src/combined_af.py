@@ -161,6 +161,18 @@ def af_average(afs):
     tmp_afs = tmp_afs/(np.sum(tmp_afs, axis=0)+1e-6)
     return tmp_afs
 
+def get_final_state(aft):
+    not_covered = np.ones(aft.shape[-1], dtype='bool')
+    final_state = np.zeros(aft.shape[-1], dtype='int')
+    for af in aft[::-1]:
+        if af.mask.any():
+            good_indices = (~af.mask.any(axis=0))&not_covered
+        else:
+            good_indices = not_covered
+        final_state[good_indices] = af.argmax(axis=0)[good_indices]
+        not_covered[good_indices]=False
+    return np.ma.array(final_state, mask=not_covered)
+
 
 def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5, synnonsyn=True):
     '''
@@ -193,7 +205,8 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5,
 
             ancestral = p.get_initial_indices(region)[patient_to_subtype[:,2]]
             rare = ((aft[:,:4,:]**2).sum(axis=1).min(axis=0)>max_div)[patient_to_subtype[:,2]]
-            final = aft[-1].argmax(axis=0)[patient_to_subtype[:,2]]
+            #final = aft[-1].argmax(axis=0)[patient_to_subtype[:,2]]
+            final=get_final_state(aft[:,:,patient_to_subtype[:,2]])
 
             if synnonsyn:
                 syn_nonsyn_by_pat[pcode] = np.zeros(L, dtype=int)
@@ -207,10 +220,17 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5,
                     continue
                 pat_af = af[:,patient_to_subtype[:,2]]
                 patient_consensus = pat_af.argmax(axis=0)
-                ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
-                w = depth/(1.0+depth/WEIGHT_CUTOFF)
+                ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==ancestral)
+                if pat_af.mask.any():
+                    ind = ind&(~pat_af.mask.any(axis=0))
+                if ind.sum()==0:
+                    continue
+                weight = depth/(1.0+depth/WEIGHT_CUTOFF)
+                print(weight, np.max(pat_af[:,ind]))
                 combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]-region_start] \
-                            += w*pat_af[:,ind]
+                            += weight*pat_af[:,ind]
+                if np.max(combined_af_by_pat[pcode])>10000:
+                    import ipdb; ipdb.set_trace()
         except:
             import ipdb; ipdb.set_trace()
     return combined_af_by_pat, syn_nonsyn_by_pat, syn_nonsyn_by_pat_unconstrained
@@ -347,7 +367,7 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
-def entropy_correlation_vs_npat(region, data, synnonsyn, reference):
+def entropy_correlation_vs_npat(region, data, reference):
     '''
     evaluate entropy within/cross-sectional correlation for subsets of patients
     of different size. returns a dictionary with rank correlation coefficients
@@ -369,15 +389,16 @@ def entropy_correlation_vs_npat(region, data, synnonsyn, reference):
 
     return within_cross_correlation
 
-def SvsNpat(data, synnonsyn, reference, figname=None, label_str=''):
+def SvsNpat(data, reference, figname=None, label_str=''):
     '''
     calculate cross-sectional and within patient entropy correlations
     for many subsets of patients and plot the average rank correlation
     against the number of patients used in the within patient average
     '''
     from util import add_panel_label
+    plt.figure()
     for region in ['gag', 'pol', 'vif', 'nef']:
-        xsS_within_corr = entropy_correlation_vs_npat(region, data, synnonsyn, reference)
+        xsS_within_corr = entropy_correlation_vs_npat(region, data, reference)
         npats = sorted(xsS_within_corr.keys())
         avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
         std_corr = [np.std(xsS_within_corr[i]) for i in npats]
@@ -489,13 +510,14 @@ def selcoeff_confidence(region, data, fname=None):
     scb[scb<0.001]=0.001
     fig, ax = plt.subplots(1, 1, figsize=(8,6))
     for i in range(1,len(thres)+1):
-        ind = which_quantile==i
-        npoints = ind.sum()*sel_coeff_array.shape[0]
-        ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
-        ax.hist(sel_coeff_array[:,ind].flatten(),
-                weights=np.ones(npoints,dtype=float) / npoints,
-                bins=np.logspace(-3, -1, 21),
-                alpha=0.7, color=cols[i+3])
+        try:
+            ind = (which_quantile==i)&(~np.any(np.isnan(sel_coeff_array)))
+            npoints = ind.sum()*sel_coeff_array.shape[0]
+            ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
+            ax.hist(sel_coeff_array[:,ind].flatten(), weights=np.ones(npoints,dtype=float)/npoints,
+                    bins=np.logspace(-3, -1, 21),alpha=0.7, color=cols[i+3])
+        except:
+            import ipdb; ipdb.set_trace()
     ax.set_xscale('log')
     ax.set_xlabel('selection coefficient', fontsize=fs)
     ax.set_ylabel('normalized counts', fontsize=fs)
@@ -745,41 +767,13 @@ def collect_data(patient_codes, regions, reference, synnonsyn=True):
             region_seq = reference.annotation[region].extract("".join(reference.consensus))
         combined_af_by_pat[region], syn_nonsyn_by_pat[region], syn_nonsyn_by_pat_unconstrained[region] \
             = collect_weighted_afs(region, patients, reference, synnonsyn=synnonsyn)
-        consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc!='-' else np.nan
+        consensus_mutation_rate[region] = np.array([total_muts[nuc] if nuc not in ['-', 'N'] else np.nan
                                                     for nuc in region_seq])
 
     return {'af_by_pat': combined_af_by_pat,
             'mut_rate': consensus_mutation_rate,
             'syn_by_pat': syn_nonsyn_by_pat,
             'syn_by_pat_uc': syn_nonsyn_by_pat_unconstrained}
-
-
-def check_neutrality(patient_codes, reference, position_file):
-    # make distribution of selection coefficients used to estimate the neutral mutation rate
-    data = collect_data(patient_codes, ['genomewide'], reference, synnonsyn=False)
-    av = process_average_allele_frequencies(data, ['genomewide'], nbootstraps=0, synnonsyn=False)
-    combined_af = av['combined_af']
-    combined_entropy = av['combined_entropy']
-    minor_af = av['minor_af']
-
-    ind = (~np.isnan(minor_af['genomewide']))
-    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
-    s = np.array(slist)
-    s[s>=0.1] = 0.1
-    s[s<=0.001] = 0.001
-    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
-
-    neutral_pos = np.array(np.loadtxt(position_file), dtype=int)
-    ind = (np.in1d(np.arange(minor_af['genomewide'].shape[0]), neutral_pos))&(~np.isnan(minor_af['genomewide']))
-    slist = mut_rates[region][ind]/(minor_af[region][ind]+af_cutoff)
-    s = np.array(slist)
-    s[s>=0.1] = 0.1
-    s[s<=0.001] = 0.001
-    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
-    plt.xscale('log')
-    plt.savefig
-    return s
-
 
 # Script
 if __name__=="__main__":
@@ -857,6 +851,6 @@ if __name__=="__main__":
     # export selection coefficients to file as supplementary info
     export_selection_coefficients(data, synnonsyn, args.subtype, reference)
 
-    # check the neutrality of the positions used to determine the neutral mutation rate.
-    s = check_neutrality(patient_codes, reference, '../data/mutation_rate_positions_0.3_gp120.txt')
-
+    SvsNpat(data, reference,
+          figname='../figures/nuc_entropy_corr_vs_patients_st_'+args.subtype,
+          label_str='A' if args.subtype=='any' else 'B')

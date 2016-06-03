@@ -314,13 +314,15 @@ def collect_data(patients, cov_min=100, no_sweeps=False, refname='HXB2'):
             if ref.consensus_indices[pos_ref] != aft_pos[:, 0].argmax():
                 continue
 
-            # Filter out sweeps if so specified
+            # Filter out sweeps if so specified, only for nonsyn
             if no_sweeps:
                 found = False
                 nuc_anc = p.initial_sequence[pos]
                 for ia, aft_nuc in enumerate(aft_pos[:4]):
                     if (alpha[ia] != nuc_anc) and (aft_nuc > 0.5).any():
-                        found = True
+                        cod_new = cod_anc[:pc] + alpha[ia] + cod_anc[pc+1:]
+                        if translate(cod_anc) != translate(cod_new):
+                            found = True
                 if found:
                     continue
 
@@ -362,7 +364,7 @@ if __name__ == '__main__':
     if args.no_sweeps:
         fn = fn[:-7]+'_nosweep.pickle'
     if not os.path.isfile(fn) or args.regenerate:
-        patients = ['p1', 'p2', 'p3','p5', 'p6', 'p8', 'p9', 'p11']
+        patients = ['p1', 'p2', 'p5', 'p6', 'p8', 'p9', 'p11']
         cov_min = 100
         data = collect_data(patients, cov_min=cov_min, no_sweeps=args.no_sweeps)
         try:

@@ -26,7 +26,7 @@ from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 
-from combined_af import process_average_allele_frequencies, draw_genome, af_average
+from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state
 
 
 
@@ -152,7 +152,8 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
 
         ancestral = p.get_initial_indices(region, type='aa')[patient_to_subtype[:,1]]
         rare = ((aft[:,:21,:]**2).sum(axis=1).min(axis=0)>max_div)[patient_to_subtype[:,1]]
-        final = aft[-1].argmax(axis=0)[patient_to_subtype[:,1]]
+        #final = aft[-1].argmax(axis=0)[patient_to_subtype[:,1]]
+        final = get_final_state(aft[:,:,patient_to_subtype[:,1]])
 
         do=[]
         acc=[]
@@ -186,6 +187,10 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
             pat_af = af[:,patient_to_subtype[:,1]]
             patient_consensus = pat_af.argmax(axis=0)
             ind = ref_ungapped&rare&(patient_consensus==consensus)&(ancestral==consensus)&(final==consensus)
+            if pat_af.mask.any():
+                ind = ind&(~pat_af.mask.any(axis=0))
+            if ind.sum()==0:
+                continue
             w = depth/(1.0+depth/WEIGHT_CUTOFF)
             combined_af_by_pat[pcode][:,patient_to_subtype[ind,0]] \
                         += w*pat_af[:-1,ind]
@@ -369,6 +374,7 @@ def PhenoCorr_vs_Npat(pheno, data, figname=None, label_str=''):
     against the number of patients used in the within patient average
     '''
     from util import add_panel_label
+    plt.figure()
     for region in ['gag', 'pol', 'vif', 'nef']:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         xsS_within_corr = correlation_vs_npat(pheno, region, data, reference)
@@ -468,11 +474,14 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
     selcoeff = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
     selcoeff[selcoeff<0.001]=0.001
     selcoeff[selcoeff>0.1]=0.1
-
-    n=selcoeff.shape[0]
-    plt.figure(figsize=(8,6))
-    plt.hist(selcoeff, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
-    plt.xscale('log')
+    ind = ~np.isnan(selcoeff)
+    n=ind.sum()
+    if n>0:
+        plt.figure(figsize=(8,6))
+        plt.hist(selcoeff[ind], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        plt.xscale('log')
+    else:
+        print("NO SELECTION COEFFICENTS FOR", region)
 
 
 def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
@@ -485,10 +494,13 @@ def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
         sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
         sc[sc<0.001]=0.001
         sc[sc>0.1]=0.1
-        selcoeff[region] = sc
-        n=len(sc)
-        y,x = np.histogram(sc, weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
-        plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region, c=cols[ri], lw=3)
+        selcoeff[region] = np.ma.array(sc, mask=np.isnan(sc))
+        n=(selcoeff[region].mask==False).sum()
+        if n>0:
+            y,x = np.histogram(selcoeff[region].compressed(), weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+            plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region, c=cols[ri], lw=3)
+        else:
+            print("NO SELECTION COEFFICENTS FOR", region)
 
     plt.legend(loc=2)
     plt.xscale('log')
@@ -515,19 +527,20 @@ def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_
         above = valid&(data['pheno'][region][pheno]>threshold)
         below = valid&(data['pheno'][region][pheno]<=threshold)
         print(above.sum(), below.sum())
-        selcoeff[region] = (sc[above], sc[below])
+        selcoeff[region] = (np.ma.array(sc[above], mask=np.isnan(sc[above])),
+                            np.ma.array(sc[below], mask=np.isnan(sc[below])))
         if plot:
-            n=len(selcoeff[region][0])
+            n=len(selcoeff[region][0].compressed())
             if cumulative:
-                ab = selcoeff[region][0][~np.isnan(selcoeff[region][0])]
-                bl = selcoeff[region][1][~np.isnan(selcoeff[region][1])]
+                ab = selcoeff[region][0].compressed()
+                bl = selcoeff[region][1].compressed()
                 plt.plot(sorted(ab), np.linspace(0,1,len(ab)), label=region+' below', ls='--', c=cols[ri], lw=3)
                 plt.plot(sorted(bl), np.linspace(0,1,len(bl)), label=region+' above', ls='-', c=cols[ri], lw=3)
             else:
-                y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+                y,x = np.histogram(selcoeff[region][0].compressed(), weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
                 plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' above', ls='--', c=cols[ri], lw=3)
-                n=len(selcoeff[region][1])
-                y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+                n=len(selcoeff[region][1].compressed())
+                y,x = np.histogram(selcoeff[region][1].compressed(), weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
                 plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' below', c=cols[ri], lw=3)
 
 
@@ -559,12 +572,13 @@ def selection_coefficients_compare_association(association, associations, region
         above = associations[region][association]
         below = ~associations[region][association]
         print(above.sum(), below.sum())
-        selcoeff[region] = (sc[above], sc[below])
-        n=len(selcoeff[region][0])
-        y,x = np.histogram(selcoeff[region][0], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        selcoeff[region] = (np.ma.array(sc[above], mask=np.isnan(sc[above])),
+                            np.ma.array(sc[below], mask=np.isnan(sc[below])))
+        n=len(selcoeff[region][0].compressed())
+        y,x = np.histogram(selcoeff[region][0].compressed(), weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
         plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' associated', ls='--', c=cols[ri], lw=3)
-        n=len(selcoeff[region][1])
-        y,x = np.histogram(selcoeff[region][1], weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
+        n=len(selcoeff[region][1].compressed())
+        y,x = np.histogram(selcoeff[region][1].compressed(), weights=np.ones(n, dtype=float)/n, bins=np.logspace(-3,-1,11))
         plt.plot(np.sqrt(x[1:]*x[:-1]), y, label=region+' non associated', c=cols[ri], lw=3)
 
     plt.legend(loc=2)
@@ -636,7 +650,7 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
 
     region='pol'
     pcodes = data['init_codon'][region].keys()
-    
+
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [1, 6]})
     ax = axs[1]
 
@@ -823,6 +837,7 @@ def plot_drug_resistance_mutation_trajectories(pcode):
 
 # Script
 if __name__=="__main__":
+    plt.ion()
 
     parser = argparse.ArgumentParser(description='amino acid allele frequencies, saturation levels, and fitness costs')
     parser.add_argument('--regenerate', action='store_true',
@@ -858,7 +873,7 @@ if __name__=="__main__":
 
     plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype)
 
-    sys.exit()
+    #sys.exit()
 
     aa_ref = 'NL4-3'
     global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
@@ -871,7 +886,7 @@ if __name__=="__main__":
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         if region == 'pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates,
-                            fname='../figures/hinkley_comparison.pdf')
+                            fname='../figures/hinkley_comparison_'+args.subtype+'.pdf')
         tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
                                          '../'+region+'_aa_entropy_scatter_st_'
                                          +args.subtype+'.pdf', annotate_protective=True)
@@ -932,3 +947,6 @@ if __name__=="__main__":
 #
 #    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
+PhenoCorr_vs_Npat('entropy', data,
+                  figname='../figures/aa_entropy_corr_vs_patients_st_'+args.subtype+'.pdf',
+                  label_str='C' if args.subtype=='any' else 'D')
