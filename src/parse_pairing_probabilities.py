@@ -18,7 +18,7 @@ from matplotlib import cm
 
 # Globals
 def load_pairing_probability():
-    data_filename = 'data/nmeth.3029-S4.txt'
+    data_filename = '../data/nmeth.3029-S4.txt'
     data = pd.read_csv(data_filename, header=1, sep='\t', index_col=0)
     data.rename(columns={'j': 'partner'}, inplace=True)
     data.index.name = 'position'
@@ -40,7 +40,7 @@ def load_pairing_probability():
 
 
 def load_shape():
-    data_filename = 'data/nmeth.3029-S2.csv'
+    data_filename = '../data/nmeth.3029-S2.csv'
     data = pd.read_csv(data_filename, sep='\t', index_col=0)
     data.index.name = 'position'
 
@@ -70,12 +70,12 @@ if __name__ == '__main__':
     pairings = {'A': 'T', 'C': 'G', 'T': 'A', 'G': 'C'}
     for position, (partner, prob) in pp.iterrows():
         partner = int(partner)
-        if ((seq[partner] != pairings[seq[position]]) and 
+        if ((seq[partner] != pairings[seq[position]]) and
             # Wobble pairs
             (frozenset([seq[position], seq[partner]]) != frozenset(['G', 'T']))):
 
             print position, seq[position], seq[partner], pairings[seq[position]]
-         
+
 
     #fig, ax = plt.subplots()
     #ax.hist(shape['probability'], bins=np.linspace(0, 1, 10))

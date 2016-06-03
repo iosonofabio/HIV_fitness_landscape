@@ -330,8 +330,8 @@ if __name__=="__main__":
             data[k].update(tmp_data[k])
 
         try:
-            #with gzip.open(fn, 'w') as ofile:
-            #    cPickle.dump(data, ofile)
+            with gzip.open(fn, 'w') as ofile:
+                cPickle.dump(data, ofile)
             print('Data saved to file:', os.path.abspath(fn))
         except IOError:
             print('Could not save data to file:', os.path.abspath(fn))
@@ -368,7 +368,9 @@ if __name__=="__main__":
     plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
                            fname='../figures/figure_4B_'+args.subtype)
 
-    shape_vs_fitness(data, minor_af, reference.pp, synnonsyn_unconstrained['genomewide'], ws=100)
+    ws=200
+    shape_vs_fitness(data, minor_af, reference.pp, synnonsyn_unconstrained['genomewide'], ws=ws,
+                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws))
 
     # check the neutrality of the positions used to determine the neutral mutation rate.
     s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')

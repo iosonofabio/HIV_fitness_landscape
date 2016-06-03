@@ -948,5 +948,5 @@ if __name__=="__main__":
 #    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
 PhenoCorr_vs_Npat('entropy', data,
-                  figname='../figures/aa_entropy_corr_vs_patients_st_'+args.subtype+'.pdf',
+                  figname='../figures/aa_entropy_corr_vs_patients_st_'+args.subtype,
                   label_str='C' if args.subtype=='any' else 'D')
