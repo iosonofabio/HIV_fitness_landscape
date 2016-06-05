@@ -156,6 +156,17 @@ def add_pairing_to_reference(reference):
         shape_array[hxb2pos] = val[field]
     reference.shape_values = np.ma.array(shape_array, mask=shape_array<-100)
 
+    # load data from Suskod et al NAR.
+    suskod = pd.read_csv('../data/nar-01265-r-2015-File010_pairing.csv')
+    fields = suskod.columns[2:]
+    suskod_data = {}
+    offset = 454
+    for field in fields:
+        tmp = np.zeros(len(reference.seq))
+        for i, p in enumerate(suskod.loc[:,field]):
+            tmp[rt.translate(i+offset, 'NL4-3')[1]] = p>0
+        suskod_data[field]=tmp
+    reference.suskod = suskod_data
 
 
 def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
@@ -233,13 +244,17 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             plt.savefig(fname+ext)
 
 
-def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None):
+def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, new_fig=True):
     '''
     calculate the correlation between the pairing probability provided
     by siegfried et al and our estimated selection coefficients
     '''
-    fig, axs = plt.subplots(2, 1, sharex=True,
+    if new_fig:
+        fig, axs = plt.subplots(2, 1, sharex=True,
                             gridspec_kw={'height_ratios':[6, 1]})
+    else:
+        fig=plt.gcf()
+        axs = fig.get_axes()
 
     region='genomewide'
     sc = (data['mut_rate'][region]/(af_cutoff+minor_af[region]))
@@ -313,7 +328,7 @@ if __name__=="__main__":
 
     # NOTE: HXB2 alignment has way more sequences resulting in better correlations
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
-
+    genes = ['gag', 'nef', 'env', 'vif','pol', 'vpr', 'vpu']
     # Intermediate data are saved to file for faster access later on
     fn = '../data/avg_noncoding_allele_frequency.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
@@ -324,7 +339,7 @@ if __name__=="__main__":
 
         # gag and nef are loaded since they overlap with relevnat non-coding structures
         # and we need to know which positions have synonymous mutations
-        data = collect_data(patient_codes, ['gag', 'nef', 'env', 'vif','pol'], reference, synnonsyn=True)
+        data = collect_data(patient_codes,genes, reference, synnonsyn=True)
         tmp_data = collect_data(patient_codes, ['genomewide'], reference, synnonsyn=False)
         for k in data:
             data[k].update(tmp_data[k])
@@ -345,7 +360,7 @@ if __name__=="__main__":
               regions, ' got:',data['mut_rate'].keys())
 
     # Average, annotate, and process allele frequencies
-    av = process_average_allele_frequencies(data, ['gag', 'nef', 'env', 'vif','pol'], nbootstraps=0,
+    av = process_average_allele_frequencies(data, genes, nbootstraps=0,
                                             synnonsyn=True)
     combined_af = av['combined_af']
     combined_entropy = av['combined_entropy']
@@ -359,7 +374,7 @@ if __name__=="__main__":
     minor_af.update(av['minor_af'])
     synnonsyn['genomewide'] = np.ones_like(minor_af['genomewide'], dtype=bool)
     synnonsyn_unconstrained['genomewide'] = np.ones_like(minor_af['genomewide'], dtype=bool)
-    for gene in ['gag', 'nef', 'env', 'vif','pol']:
+    for gene in genes:
         pos = [x for x in reference.annotation[gene]]
         synnonsyn_unconstrained['genomewide'][pos] = synnonsyn_unconstrained[gene]
         synnonsyn['genomewide'][pos] = synnonsyn[gene]
@@ -368,10 +383,23 @@ if __name__=="__main__":
     plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
                            fname='../figures/figure_4B_'+args.subtype)
 
-    ws=200
-    shape_vs_fitness(data, minor_af, reference.pp, synnonsyn_unconstrained['genomewide'], ws=ws,
+    ws=100
+    subset_of_positions = synnonsyn_unconstrained['genomewide']
+    subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
+    shape_vs_fitness(data, minor_af, reference.pp, subset_of_positions, ws=ws,
                      fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws))
+
+    shape_vs_fitness(data, minor_af, -reference.entropy, subset_of_positions, ws=ws,
+                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws), new_fig=False)
+
+    for k in reference.suskod:
+        if k.startswith('PPfold, SHAPE'):
+            print(k)
+            shape_vs_fitness(data, minor_af, reference.suskod[k], subset_of_positions, ws=ws,
+                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws), new_fig=False)
 
     # check the neutrality of the positions used to determine the neutral mutation rate.
     s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
+
+
 

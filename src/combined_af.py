@@ -209,6 +209,7 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5,
             final=get_final_state(aft[:,:,patient_to_subtype[:,2]])
 
             if synnonsyn:
+                # note: this doesn not work for split reading frames.
                 syn_nonsyn_by_pat[pcode] = np.zeros(L, dtype=int)
                 syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
                     (p.get_syn_mutations(region, mask_constrained=True).sum(axis=0)>1)[patient_to_subtype[:,2]]
