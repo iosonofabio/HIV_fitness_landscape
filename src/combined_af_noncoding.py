@@ -244,7 +244,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             plt.savefig(fname+ext)
 
 
-def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, new_fig=True):
+def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, new_fig=True, label=None):
     '''
     calculate the correlation between the pairing probability provided
     by siegfried et al and our estimated selection coefficients
@@ -264,7 +264,8 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
     ind = ~np.isnan(sc)
     print("overall correlation:", spearmanr(sc[ind], shape_data[ind]))
     ind = (~np.isnan(sc))&(synnonsyn)
-    print("synonymous only correlation:", spearmanr(sc[ind], shape_data[ind]))
+    spear = spearmanr(sc[ind], shape_data[ind])
+    print("synonymous only correlation:", spear)
 
     pp_fitness_correlation = []
     for ii in range(len(sc)-ws):
@@ -273,8 +274,9 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
         if ind.sum()>ws*0.2:
             cc = np.corrcoef(shape_data[ii:ii+ws][ind], sc[ii:ii+ws][ind])[0,1]
         pp_fitness_correlation.append(cc)
-    axs[0].plot(np.arange(len(sc)-ws)+ws*0.5, pp_fitness_correlation)
-    axs[0].set_ylabel('fitness cost/RNA pairing correlation in '+str(ws)+' base windows')
+    axs[0].plot(np.arange(len(sc)-ws)+ws*0.5, pp_fitness_correlation,
+                label=label + r', $\rho='+str(np.round(spear.correlation, 3))+'$')
+    axs[0].set_ylabel('rank correlation with fitness costs in '+str(ws)+' base windows')
     # add genome annotation
     regs = ['gag', 'pol', 'vif', 'tat','vpu','nef', 'env', 'RRE', "LTR5'", "LTR3'", 'V1', 'V2', 'V3', 'V5']
     annotations = {k: val for k, val in reference.annotation.iteritems() if k in regs}
@@ -286,6 +288,8 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
     for xtmp in vlines:
         axs[0].axvline(xtmp, lw=1, color='0.8')
 
+    if label is not None:
+        axs[0].legend(loc=3)
     plt.tight_layout()
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
@@ -391,17 +395,17 @@ if __name__=="__main__":
     ws=100
     subset_of_positions = synnonsyn_unconstrained['genomewide']
     #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
-    shape_vs_fitness(data, minor_af, reference.pp, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws))
-
     shape_vs_fitness(data, minor_af, -reference.entropy, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=False)
+                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=True, label="cross-sectional diversity")
+
+    shape_vs_fitness(data, minor_af, reference.pp, subset_of_positions, ws=ws,
+                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=False, label="pairing probability")
 
     for k in reference.suskod:
         if k.startswith('PPfold, SHAPE'):
             print(k)
             shape_vs_fitness(data, minor_af, reference.suskod[k], subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws), new_fig=False)
+                     fname='../figures/pairing_fitness_correlation_synonly_'+args.subtype+'_ws_'+str(ws), new_fig=False, label=k+'; from Suskosd et al')
 
     # check the neutrality of the positions used to determine the neutral mutation rate.
     s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
