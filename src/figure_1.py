@@ -203,8 +203,12 @@ def plot_mutation_increase(data, mu=None, axs=None):
         ax.set_ylabel('fraction mutated', fontsize=16)
         ax.tick_params(axis='both', labelsize=18)
         ax.grid(True)
-    axs[0].set_yticklabels(['0.00', '0.01', '0.02', '0.03', '0.04'])
-    axs[1].set_yticklabels(['0.000', '0.002', '0.004', '0.006', '0.008'])
+
+    yticks = [0.0, 0.01, 0.02, 0.03, 0.04]
+    axs[0].set_yticks(yticks)
+
+    yticks = [0.0, 0.003, 0.006, 0.009, 0.012]
+    axs[1].set_yticks(yticks)
 
     plt.tight_layout()
 

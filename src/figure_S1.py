@@ -20,16 +20,9 @@ from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
 
-from util import add_binned_column, boot_strap_patients
+from util import add_binned_column, boot_strap_patients, load_mutation_rates
 
 fs=18
-
-# Functions
-def load_mutation_rate():
-    fn = '../data/mutation_rate.pickle'
-    mu =  pd.read_pickle(fn)
-    return mu
-
 
 def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
     '''Compare new estimate for mu with Abram et al 2010'''
@@ -111,9 +104,11 @@ def plot_comparison(mu, muA, dmulog10=None, dmuAlog10=None):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Figure S1')
+    parser.add_argument('--threshold', default=0.1, help='diversity threshold')
+    parser.add_argument('--gp120', action='store_true', default=False, help='exclude gp120')
     args = parser.parse_args()
 
-    mu = load_mutation_rate()
+    mu = load_mutation_rates(args.threshold, args.gp120)
 
     plot_comparison(mu['mu'],
                     mu['muA'],

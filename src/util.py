@@ -10,15 +10,23 @@ import numpy as np
 
 
 # Globals
-fig_width = 5  
-fig_fontsize = 12  
+fig_width = 5
+fig_fontsize = 12
 
+
+# Functions
+def load_mutation_rates(threshold=0.3, gp120=True):
+    import pandas as pd
+    fn = '../data/mutation_rate_'+str(threshold) + ('_gp120' if gp120 else '') + '.pickle'
+    print('loading', fn)
+    mu =  pd.read_pickle(fn)
+    return mu
 
 
 # Functions
 def add_binned_column(df, bins, to_bin):
     '''Add a column to data frame with binned values (in-place)
-    
+
     Parameters
        df (pandas.DataFrame): data frame to change in-place
        bins (array): bin edges, including left- and rightmost

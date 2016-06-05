@@ -21,14 +21,7 @@ from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.sequence import alpha, alphal
 
-from util import add_binned_column, boot_strap_patients
-
-
-
-# Functions
-def load_mutation_rates():
-    fn = '../data/mutation_rate.pickle'
-    return pd.read_pickle(fn)
+from util import add_binned_column, boot_strap_patients, load_mutation_rates
 
 
 def prepare_data_for_fit(data, plot=False):

@@ -26,7 +26,7 @@ from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 
-from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state
+from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
 
 
 
@@ -76,14 +76,6 @@ offsets = {
 }
 
 
-
-
-# Functions
-def load_mutation_rates():
-    fn = '../data/mutation_rate.pickle'
-    return pd.read_pickle(fn)
-
-
 def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
     from Bio.Seq import CodonTable
     CT = CodonTable.standard_dna_table.forward_table
@@ -102,8 +94,7 @@ def aminoacid_mutation_rate(initial_codon, der, nuc_muts, doublehit=False):
 def calc_amino_acid_mutation_rates():
     from Bio.Seq import CodonTable
 
-    with open('../data/mutation_rate.pickle') as mutfile:
-        nuc_mutation_rates = cPickle.load(mutfile)['mu']
+    nuc_mutation_rates = load_mutation_rates()['mu']
 
     CT = CodonTable.standard_dna_table.forward_table
     aa_mutation_rates = defaultdict(float)

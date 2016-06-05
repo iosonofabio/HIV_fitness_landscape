@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
 
+fs=16
+
 def load_mutation_rate(fname):
     from cPickle import load
     return load(open(fname))
@@ -19,11 +21,16 @@ if __name__=="__main__":
         for mi, m in enumerate(sorted(muts.keys())):
             y = [x[0] for x in muts[m]]
             yerr = [np.exp(np.log(10)*x[1])*x[0] for x in muts[m]]
-            ax.errorbar(1.015**mi*Sthres, y, yerr, label=m if len(ex) else None,
-                        ls='-' if len(ex) else '--')
+            ax.plot(1.015**mi*Sthres, y, label=m if len(ex) else None,
+                    ls='-' if len(ex) else '--', marker='o' if mi<6 else 'v')
+#            ax.errorbar(1.015**mi*Sthres, y, yerr, label=m if len(ex) else None,
+#                        ls='-' if len(ex) else '--')
     ax.set_yscale('log')
     ax.set_xscale('log')
-    ax.set_ylabel('rate')
-    ax.set_xlabel('threshold')
-    ax.legend(ncol=3)
+    ax.set_ylabel('rate', fontsize = fs)
+    ax.set_xlabel('diversity threshold', fontsize = fs)
+    ax.tick_params(labelsize=0.8*fs)
+    ax.legend(ncol=3, fontsize = 0.8*fs)
+    ax.set_ylim(1e-8,1e-3)
     plt.savefig('../figures/threshold_sensitivity.pdf')
+    plt.savefig('../figures/figure_S2A.pdf')

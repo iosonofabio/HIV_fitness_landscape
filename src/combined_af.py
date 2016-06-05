@@ -3,6 +3,9 @@
 author:     Richard Neher
 date:       22/02/16
 content:    Combine allele frequencies from all patients for strongly conserved sites
+            this script produces figures 3 and 4A from the manuscript, along with
+            parts of the suplementary figures S4, S5, S6
+            a number of tabular supplementary files are produced
 '''
 # Modules
 from __future__ import division, print_function
@@ -25,7 +28,7 @@ import seaborn as sns
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.af_tools import divergence
-
+from util import load_mutation_rates
 
 
 # Globals
@@ -38,13 +41,6 @@ ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
 cols = sns.color_palette(n_colors=7)
 fs = 16
 regions = ['gag', 'pol', 'vif', 'vpr', 'vpu', 'env', 'nef']
-
-
-
-# Functions
-def load_mutation_rates():
-    fn = '../data/mutation_rate.pickle'
-    return pd.read_pickle(fn)
 
 
 def running_average(obs, ws):

@@ -301,7 +301,7 @@ def check_neutrality(minor_af, mut_rates, position_file):
     s[s>=0.1] = 0.1
     s[s<=0.001] = 0.001
     plt.figure()
-    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5, label='all positions, n='+ str(len(s)))
 
     neutral_pos = np.array(np.loadtxt(position_file), dtype=int)
     ind = (np.in1d(np.arange(minor_af['genomewide'].shape[0]), neutral_pos))&(~np.isnan(minor_af['genomewide']))
@@ -309,8 +309,13 @@ def check_neutrality(minor_af, mut_rates, position_file):
     s = np.array(slist)
     s[s>=0.1] = 0.1
     s[s<=0.001] = 0.001
-    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5)
+    plt.hist(s, bins=np.logspace(-3,-1,21), weights=np.ones(len(s))/len(s), alpha=0.5, label='mutation rate positions, n='+ str(len(s)))
     plt.xscale('log')
+    plt.legend(loc=9, fontsize=fs*0.8)
+    plt.xlabel('fitness cost estimate [1/day]', fontsize=fs)
+    plt.ylabel('fraction of sites', fontsize=fs)
+    plt.tick_params(labelsize=fs*0.8)
+    plt.tight_layout()
     plt.savefig('../figures/neutral_set_comparison.pdf')
     return s
 
@@ -381,16 +386,16 @@ if __name__=="__main__":
 
     add_pairing_to_reference(reference)
     plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
-                           fname='../figures/figure_4B_'+args.subtype)
+                           fname='../figures/figure_4B_st_'+args.subtype)
 
     ws=100
     subset_of_positions = synnonsyn_unconstrained['genomewide']
-    subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
+    #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
     shape_vs_fitness(data, minor_af, reference.pp, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws))
+                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws))
 
     shape_vs_fitness(data, minor_af, -reference.entropy, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_'+args.subtype+'_ws_'+str(ws), new_fig=False)
+                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=False)
 
     for k in reference.suskod:
         if k.startswith('PPfold, SHAPE'):

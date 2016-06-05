@@ -137,19 +137,19 @@ def plot_fit(data_sat, data_KL, data_pooled):
                 color=palette[0],
                 label='Sat',
                )
-
-    # B2: KL fit
-    # Ignore most conserved quantile
-    x = np.array(data_KL.index)  [1:]
-    y = np.array(data_KL['mean'])[1:]
-    dy = np.array(data_KL['std'])[1:]
-    ax.errorbar(x, y, yerr=dy,
-                ls='-',
-                marker='o',
-                lw=2,
-                color=palette[1],
-                label='KL',
-               )
+    if data_KL is not None:
+        # B2: KL fit
+        # Ignore most conserved quantile
+        x = np.array(data_KL.index)  [1:]
+        y = np.array(data_KL['mean'])[1:]
+        dy = np.array(data_KL['std'])[1:]
+        ax.errorbar(x, y, yerr=dy,
+                    ls='-',
+                    marker='o',
+                    lw=2,
+                    color=palette[1],
+                    label='KL',
+                   )
 
     # B3: pooled
     x = data_pooled['all'][:-1, 0]
@@ -191,10 +191,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     data_sat = load_data_saturation()
-    data_KL = load_data_KL()
+    #data_KL = load_data_KL()
     data_pooled = load_data_pooled()
 
-    plot_fit(data_sat, data_KL, data_pooled)
+    plot_fit(data_sat, None, data_pooled)
 
     for ext in ['.png', '.pdf', '.svg']:
         plt.savefig('../figures/figure_2'+ext)
