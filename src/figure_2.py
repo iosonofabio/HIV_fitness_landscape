@@ -188,13 +188,17 @@ def plot_fit(data_sat, data_KL, data_pooled):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Figure 2')
+    parser.add_argument('--KL', action='store_true', default='False', help='include KL estimates')
     args = parser.parse_args()
 
     data_sat = load_data_saturation()
-    #data_KL = load_data_KL()
+    if args.KL:
+        data_KL = load_data_KL()
+    else:
+        data_KL=None
     data_pooled = load_data_pooled()
 
-    plot_fit(data_sat, None, data_pooled)
+    plot_fit(data_sat, data_KL, data_pooled)
 
     for ext in ['.png', '.pdf', '.svg']:
         plt.savefig('../figures/figure_2'+ext)

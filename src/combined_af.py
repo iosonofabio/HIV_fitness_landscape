@@ -786,7 +786,7 @@ if __name__=="__main__":
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
 
     # Intermediate data are saved to file for faster access later on
-    fn = '../data/avg_nucleotide_allele_frequency.pickle.gz'
+    fn = '../data/avg_nucleotide_allele_frequency_str_'+args.subtype+'.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             #patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only, no p4/p7

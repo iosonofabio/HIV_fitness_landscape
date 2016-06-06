@@ -51,6 +51,7 @@ features = {
     'interferon-stimulated response':[(655,674)],  # from LANL,
     'PSI SL1-4':[(691, 735), (736, 755), (766,779), (790, 811)],  # from LANL,
     'frame shift':[(2086,2093),(2101,2126)],  # from LANL,
+    'Wang et al':[(2468,2578)],  # from LANL,
     # RRE extracted from Siegfried et al NL4-3 -> HXB2 coordinates + 454 since their NL4-3 starts at TAR
     'RRE':[ (7780, 7792), (7796, 7805), (7808, 7813),(7817, 7825),(7829, 7838),(7846, 7853),
             (7856, 7863), (7865, 7872), (7875, 7880), (7886, 7892), (7901, 7913),
@@ -272,21 +273,40 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
         ind = (~np.isnan(sc[ii:ii+ws]))&synnonsyn[ii:ii+ws]
         cc=0
         if ind.sum()>ws*0.2:
-            cc = np.corrcoef(shape_data[ii:ii+ws][ind], sc[ii:ii+ws][ind])[0,1]
+            tmp = spearmanr(shape_data[ii:ii+ws][ind], sc[ii:ii+ws][ind])
+            cc = tmp.correlation
         pp_fitness_correlation.append(cc)
     axs[0].plot(np.arange(len(sc)-ws)+ws*0.5, pp_fitness_correlation,
                 label=label + r', $\rho='+str(np.round(spear.correlation, 3))+'$')
     axs[0].set_ylabel('rank correlation with fitness costs in '+str(ws)+' base windows')
-    # add genome annotation
-    regs = ['gag', 'pol', 'vif', 'tat','vpu','nef', 'env', 'RRE', "LTR5'", "LTR3'", 'V1', 'V2', 'V3', 'V5']
-    annotations = {k: val for k, val in reference.annotation.iteritems() if k in regs}
-    annotations = draw_genome(annotations, axs[1])
-    axs[1].set_axis_off()
-    # vertical lines at feature boundaries
-    feats = ['gag', 'pol', 'nef','env', 'RRE', "LTR5'", "LTR3'"]
-    vlines = np.unique(annotations.loc[annotations['name'].isin(feats), ['x1', 'x2']])
-    for xtmp in vlines:
-        axs[0].axvline(xtmp, lw=1, color='0.8')
+    if new_fig:
+        # add genome annotation
+        regs = ['gag', 'pol', 'vif', 'tat','vpu','nef', 'env', 'RRE', "LTR5'", "LTR3'", 'V1', 'V2', 'V3', 'V5']
+        annotations = {k: val for k, val in reference.annotation.iteritems() if k in regs}
+        annotations = draw_genome(annotations, axs[1])
+        axs[1].set_axis_off()
+        # vertical lines at feature boundaries
+        feats = ['gag', 'pol', 'nef','env', 'RRE', "LTR5'", "LTR3'"]
+        vlines = np.unique(annotations.loc[annotations['name'].isin(feats), ['x1', 'x2']])
+        for xtmp in vlines:
+            axs[0].axvline(xtmp, lw=1, color='0.8')
+
+    if new_fig:
+        ngenes = np.zeros(len(reference.seq))
+        for feat in reference.annotation.values():
+            if feat.type=='gene':
+                ngenes[[x for x in feat]] +=1
+        overlaps= np.array(ngenes>1.5, dtype=int)
+        blocks = zip(np.where(np.diff(overlaps)==1)[0],np.where(np.diff(overlaps)==-1)[0])
+        for b in blocks:
+            axs[0].plot(b, [0.8, 0.8], c='k', lw=3)
+            #axs[0].scatter(np.arange(len(ngenes))[ngenes>1], 0.8*np.ones((ngenes>1).sum()), c='k')
+
+    if new_fig:
+        for feat in ['polyA', 'U5', 'U5 stem', 'PBS', 'PSI SL1-4']+['RRE'] + ['polypurine']+['frame shift']:
+            #axs[0].text(pos[0][0], 0.74, feat)
+            for p in features[feat]:
+                axs[0].plot(p, [0.85, 0.85], c='k', lw=3)
 
     if label is not None:
         axs[0].legend(loc=3)
@@ -339,7 +359,7 @@ if __name__=="__main__":
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
     genes = ['gag', 'nef', 'env', 'vif','pol', 'vpr', 'vpu']
     # Intermediate data are saved to file for faster access later on
-    fn = '../data/avg_noncoding_allele_frequency.pickle.gz'
+    fn = '../data/avg_noncoding_allele_frequency_st_'+args.subtype+'.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             patient_codes = ['p2','p3', 'p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
@@ -396,16 +416,21 @@ if __name__=="__main__":
     subset_of_positions = synnonsyn_unconstrained['genomewide']
     #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
     shape_vs_fitness(data, minor_af, -reference.entropy, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=True, label="cross-sectional diversity")
+                     fname=None, new_fig=True,
+                     label=("group M" if args.subtype=='any' else 'subtype B')+ "diversity")
+
+#    shape_vs_fitness(data, minor_af, -reference.shape_values, subset_of_positions, ws=ws,
+#                     fname=None, new_fig=False, label="SHAPE")
 
     shape_vs_fitness(data, minor_af, reference.pp, subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws), new_fig=False, label="pairing probability")
+                     fname=None, new_fig=False, label="pairing probability, Siegfried et al.")
 
     for k in reference.suskod:
         if k.startswith('PPfold, SHAPE'):
             print(k)
             shape_vs_fitness(data, minor_af, reference.suskod[k], subset_of_positions, ws=ws,
-                     fname='../figures/pairing_fitness_correlation_synonly_'+args.subtype+'_ws_'+str(ws), new_fig=False, label=k+'; from Suskosd et al')
+                     fname='../figures/pairing_fitness_correlation_st_'+args.subtype+'_ws_'+str(ws),
+                     new_fig=False, label=k.replace(', ','+')+'; from Sukosd et al.')
 
     # check the neutrality of the positions used to determine the neutral mutation rate.
     s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
