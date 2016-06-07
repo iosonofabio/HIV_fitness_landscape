@@ -51,12 +51,19 @@ features = {
     'interferon-stimulated response':[(655,674)],  # from LANL,
     'PSI SL1-4':[(691, 735), (736, 755), (766,779), (790, 811)],  # from LANL,
     'frame shift':[(2086,2093),(2101,2126)],  # from LANL,
-    'Wang et al':[(2468,2578)],  # from LANL,
+    'Wang et al':[(2468,2578)],  # from Wang et al,
+    'nuc_hyper':[(4400,4900)],  # from LANL,
+    'siteC':[(4680,4700)],  # from LANL,
+    'oct-1':[(4776,4790)],  # from LANL,
+    'siteD':[(4816,4851)],  # from LANL,
+    'A1':[(4887,4905)],  # Saliou et al,
+    'D2':[(4959,4968)],  # Saliou et al,
+    'cPPT':[(4785,4810)],  # from LANL,
     # RRE extracted from Siegfried et al NL4-3 -> HXB2 coordinates + 454 since their NL4-3 starts at TAR
     'RRE':[ (7780, 7792), (7796, 7805), (7808, 7813),(7817, 7825),(7829, 7838),(7846, 7853),
             (7856, 7863), (7865, 7872), (7875, 7880), (7886, 7892), (7901, 7913),
             (7916, 7928), (7931, 7940),(7948, 7957),(7962, 7972),(7975, 8003)],
-    'polypurine':[(9069,9094)],  # from LANL,
+    'PPT':[(9069,9094)],  # from LANL,
     'TCF-1alpha':[(9400,9415)],  # from LANL,
     'NK-kappa B1':[(9448,9459)],  # from LANL,
     'SP1':[(9462,9472),(9473,9483),(9483,9494)],  # from LANL,
@@ -97,7 +104,7 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
         ind = (~np.isnan(minor_af[region]))&synnonsyn
         ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
                     np.exp(running_average(np.log(sc[ind]), ws)),
-                    c=cols[0], ls='--', label='non-coding/synonymous')
+                    c=cols[2], ls='--', label='non-coding/synonymous')
 
     # add running average of phenotype if desired
     if pheno is not None:
@@ -177,8 +184,8 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ymax = 0.25
     ymin = 0.0005
 
-    fig, axs = plt.subplots(1, 3, sharey=True, figsize =(10,5),
-                            gridspec_kw={'width_ratios':[4, 1, 2]})
+    fig, axs = plt.subplots(1, 4, sharey=True, figsize =(10,5),
+                            gridspec_kw={'width_ratios':[4, 1, 2.5, 1]})
 
     # plot the 5' region
     start, stop = 500, 900
@@ -201,6 +208,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.text(stop, ax.get_ylim()[0]*1.12, 'gag', fontsize=fs*0.8, horizontalalignment='right')
     ax.set_ylim(ymin, ymax)
 
+
     # frame shift region -- no syn fitness cost here since this is in an overlap
     start, stop = 2050, 2150
     feature_names = ['frame shift']
@@ -215,16 +223,37 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.plot([reference.annotation['pol'].location.start,stop],
             1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.25, 'pol', fontsize=fs*0.8, horizontalalignment='right')
-    ax.set_xticks([2050, 2100,2150])
+    ax.set_xticks([2050, 2150])
     ax.set_ylim(ymin, ymax)
+
+    # plot the cPPT region
+    start, stop = 4750, 5000
+    feature_names = ['A1','D2', 'cPPT']
+    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+                                     minor_af, reference, pheno=None,
+                                     synnonsyn=synnonsyn['genomewide'],
+                                     ws=8, wsp=1, ax=axs[2])
+    # add label and dimension to left-most axis, all other are tied to this one
+    ax.set_ylim(ymin, ymax)
+
+    ax.plot([start,reference.annotation["IN"].location.end],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(start, ax.get_ylim()[0]*1.12, "INT", fontsize=fs*0.8, horizontalalignment='left')
+
+    ax.plot([reference.annotation['vif'].location.start, stop],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(stop, ax.get_ylim()[0]*1.12, 'vif', fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_xticks([4800, 4900])
+    ax.set_ylim(ymin, ymax)
+
 
     # plot the 3' region
     start, stop = 9050, 9150
-    feature_names = ['polypurine']
+    feature_names = ['PPT']
     ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
                                              minor_af, reference, pheno=None,
                                              synnonsyn=synnonsyn['genomewide'],
-                                             ws=8, wsp=1, ax=axs[2])
+                                             ws=8, wsp=1, ax=axs[3])
 
     ax.plot([start, reference.annotation['nef'].location.end],
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
@@ -233,12 +262,13 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     ax.plot([reference.annotation["LTR3'"].location.start,stop],
             1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
     ax.text(stop, ax.get_ylim()[0]*1.25, "LTR3'", fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_xticks([9050, 9100,9150])
     ax.set_ylim(ymin, ymax)
 
     fig.text(0.5, 0.01, 'Position in HIV-1 reference (HXB2) [bp]',
              ha='center',
              fontsize=fs)
-    plt.tight_layout(rect=(0, 0.04, 1, 1))
+    plt.tight_layout(rect=(0, 0.04, 1, 1),w_pad=-1)
 
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
@@ -303,14 +333,13 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
             #axs[0].scatter(np.arange(len(ngenes))[ngenes>1], 0.8*np.ones((ngenes>1).sum()), c='k')
 
     if new_fig:
-        for feat in ['polyA', 'U5', 'U5 stem', 'PBS', 'PSI SL1-4']+['RRE'] + ['polypurine']+['frame shift']:
+        for feat in ['polyA', 'U5', 'U5 stem', 'PBS','cPPT', 'A1','PSI SL1-4']+['RRE'] + ['PPT']+['frame shift']+['TAR', 'TATA', 'SP1', 'TCF-1alpha']:
             #axs[0].text(pos[0][0], 0.74, feat)
             for p in features[feat]:
-                axs[0].plot(p, [0.85, 0.85], c='k', lw=3)
+                axs[0].plot(p, [0.85, 0.85], c='r', lw=3)
 
     if label is not None:
         axs[0].legend(loc=3)
-    plt.tight_layout()
     if fname is not None:
         for ext in ['.png', '.svg', '.pdf']:
             plt.savefig(fname+ext)
