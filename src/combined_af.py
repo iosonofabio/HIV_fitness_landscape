@@ -755,6 +755,7 @@ def collect_data(patient_codes, regions, reference, synnonsyn=True):
 
     patients = []
     for pcode in patient_codes:
+        print(pcode)
         p = Patient.load(pcode)
         patients.append(p)
     for region in regions:

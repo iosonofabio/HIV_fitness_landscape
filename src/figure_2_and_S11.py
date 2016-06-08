@@ -2,8 +2,9 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure 2. This script plots precomputed data, so you have to run
-            it after the following scripts that actually compute the results:
+content:    Make figure 2 and figure S11.
+            This script plots precomputed data, so you have to run it after the
+            following scripts that actually compute the results:
                - fitness_cost_saturation.py (sat fit)
                - fitness_cost_KL.py (KL fit)
                - combined_af.py (pooled fit)
@@ -57,7 +58,7 @@ def load_data_pooled():
     return caf_s
 
 
-def plot_fit(data_sat, data_KL, data_pooled):
+def plot_fit(data_sat, data_pooled):
     from matplotlib import cm
     from util import add_panel_label
 
@@ -137,21 +138,8 @@ def plot_fit(data_sat, data_KL, data_pooled):
                 color=palette[0],
                 label='Sat',
                )
-    if data_KL is not None:
-        # B2: KL fit
-        # Ignore most conserved quantile
-        x = np.array(data_KL.index)  [1:]
-        y = np.array(data_KL['mean'])[1:]
-        dy = np.array(data_KL['std'])[1:]
-        ax.errorbar(x, y, yerr=dy,
-                    ls='-',
-                    marker='o',
-                    lw=2,
-                    color=palette[1],
-                    label='KL',
-                   )
 
-    # B3: pooled
+    # B2: pooled
     x = data_pooled['all'][:-1, 0]
     y = data_pooled['all'][:-1, 1]
     dy = data_pooled['all_std'][:-1, 1]
@@ -183,22 +171,103 @@ def plot_fit(data_sat, data_KL, data_pooled):
     plt.show()
 
 
+def plot_fit_withKL(data_sat, data_KL, data_pooled):
+    from matplotlib import cm
+    from util import add_panel_label
+
+    palette = sns.color_palette('colorblind')
+
+    fig_width = 5
+    fs = 16
+    fig, ax = plt.subplots(1, 1,
+                           figsize=(fig_width, 0.9 * fig_width))
+
+
+    data_to_fit = data_sat['data_to_fit']
+    mu = data_sat['mu']
+    s = data_sat['s']
+
+    # B1: Saturation fit
+    x = np.array(s.index)
+    y = np.array(s['s'])
+    dy = np.array(s['ds'])
+
+    ymin = 0.1
+
+    x = x[1:]
+    y = y[1:]
+    dy = dy[1:]
+
+    ax.errorbar(x, y,
+                yerr=dy,
+                ls='-',
+                marker='o',
+                lw=2,
+                color=palette[0],
+                label='Sat',
+               )
+
+    # B2: KL fit
+    # Ignore most conserved quantile
+    x = np.array(data_KL.index)  [1:]
+    y = np.array(data_KL['mean'])[1:]
+    dy = np.array(data_KL['std'])[1:]
+    ax.errorbar(x, y, yerr=dy,
+                ls='-',
+                marker='o',
+                lw=2,
+                color=palette[1],
+                label='KL',
+               )
+
+    # B3: pooled
+    x = data_pooled['all'][:-1, 0]
+    y = data_pooled['all'][:-1, 1]
+    dy = data_pooled['all_std'][:-1, 1]
+    ax.errorbar(x, y, yerr=dy,
+                ls='-',
+                marker='o',
+                lw=2,
+                color=palette[2],
+                label='Pooled',
+               )
+
+    ax.legend(loc='upper right', fontsize=16)
+    ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
+    ax.set_ylabel('Fitness cost', fontsize=fs)
+    ax.set_xlim(0.9e-3, 2.5)
+    ax.set_ylim(9e-5, 0.11)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.xaxis.set_tick_params(labelsize=fs)
+    ax.yaxis.set_tick_params(labelsize=fs)
+
+
+    plt.tight_layout()
+    plt.ion()
+    plt.show()
+
+
+
 
 # Script
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Figure 2')
-    parser.add_argument('--KL', action='store_true', default='False', help='include KL estimates')
+    parser.add_argument('--KL', action='store_true',
+                        help='include KL estimates')
     args = parser.parse_args()
 
     data_sat = load_data_saturation()
-    if args.KL:
-        data_KL = load_data_KL()
-    else:
-        data_KL=None
     data_pooled = load_data_pooled()
 
-    plot_fit(data_sat, data_KL, data_pooled)
+    plot_fit(data_sat, data_pooled)
 
-    for ext in ['.png', '.pdf', '.svg']:
-        plt.savefig('../figures/figure_2'+ext)
+    for ext in ['png', 'pdf', 'svg']:
+        plt.savefig('../figures/figure_2'+'.'+ext)
+
+    if args.KL:
+        data_KL = load_data_KL()
+        plot_fit_withKL(data_sat, data_KL, data_pooled)
+        for ext in ['png', 'pdf', 'svg']:
+            plt.savefig('../figures/figure_S11'+'.'+ext)
