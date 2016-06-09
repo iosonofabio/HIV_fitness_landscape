@@ -97,21 +97,21 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
     # add a running average of selection coefficients
     ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
                 np.exp(running_average(np.log(sc[ind]), ws)),
-                c=cols[0], label='all sites')
+                c=cols[0], label='all sites', ls='--')
 
     # repeat running average, but restricted to sites that are synonymous
     if synnonsyn is not None:
         ind = (~np.isnan(minor_af[region]))&synnonsyn
         ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
                     np.exp(running_average(np.log(sc[ind]), ws)),
-                    c=cols[2], ls='--', label='non-coding/synonymous')
+                    c=cols[2], ls='-', label='non-coding/synonymous')
 
     # add running average of phenotype if desired
     if pheno is not None:
         ind = ~np.isnan(pheno)
         ax.plot(running_average(np.arange(len(pheno))[ind], wsp),
                     np.exp(running_average(np.log(pheno+0.0001), wsp)),
-                    c=cols[1], ls='--')
+                    c=cols[1], ls='-')
 
     # add features
     colors = sns.color_palette('husl', 7)
