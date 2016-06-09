@@ -50,7 +50,7 @@ features = {
     'PBS':[(636,654)],  # from LANL,
     'interferon-stimulated response':[(655,674)],  # from LANL,
     'PSI SL1-4':[(691, 735), (736, 755), (766,779), (790, 811)],  # from LANL,
-    'frame shift':[(2086,2093),(2101,2126)],  # from LANL,
+    'frameshift':[(2086,2093),(2101,2126)],  # from LANL,
     'Wang et al':[(2468,2578)],  # from Wang et al,
     'nuc_hyper':[(4400,4900)],  # from LANL,
     'siteC':[(4680,4700)],  # from LANL,
@@ -92,19 +92,22 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
     sc[sc>0.1] = 0.1
     sc[sc<0.001] = 0.001
     # add individual data points
-    ax.plot(np.arange(minor_af[region].shape[0])[ind],sc[ind],'o', ms=3,
-                c=cols[0])
+    ax.plot(np.arange(minor_af[region].shape[0])[ind],sc[ind],'o',
+            ms=3,
+            c=cols[0],
+            alpha=0.5)
+
     # add a running average of selection coefficients
     ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
-                np.exp(running_average(np.log(sc[ind]), ws)),
-                c=cols[0], label='all sites')
+            np.exp(running_average(np.log(sc[ind]), ws)),
+            c=cols[0], label='all sites')
 
     # repeat running average, but restricted to sites that are synonymous
     if synnonsyn is not None:
         ind = (~np.isnan(minor_af[region]))&synnonsyn
         ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
-                    np.exp(running_average(np.log(sc[ind]), ws)),
-                    c=cols[2], ls='--', label='non-coding/synonymous')
+                np.exp(running_average(np.log(sc[ind]), ws)),
+                c=cols[2], label='non-coding/synonymous')
 
     # add running average of phenotype if desired
     if pheno is not None:
@@ -124,8 +127,12 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
             all_pos.extend(element)
             ax.plot(np.array(element)-1, [ybar, ybar], lw=3,
                     color=color)
+
+        ytext_tmp = ytext
+        if (fi % 2) and (feat not in ['D2']):
+            ytext_tmp *= 1.26
         ax.text((elements[0][0]+elements[-1][1])*0.5,
-                ytext * (1.0 + 0.26 * ((fi % 2) == 1)),
+                ytext_tmp,
                 feat,
                 horizontalalignment='center',
                 fontsize=fs*0.8)
@@ -133,7 +140,110 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
     ax.set_yscale('log')
     ax.tick_params(labelsize=fs*0.8)
     ax.set_xlim(start, stop)
+    for tl in ax.get_xmajorticklabels():
+        tl.set_rotation(45)
     return ax
+
+
+def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
+    '''Plot fitness cost at noncoding features'''
+    from util import add_panel_label
+
+    ymax = 0.25
+    ymin = 0.0005
+
+    y_second_gene = 1.18
+
+    fig, axs = plt.subplots(1, 4, sharey=True, figsize =(10,5),
+                            gridspec_kw={'width_ratios':[4, 1, 2.5, 1]})
+
+    # plot the 5' region
+    start, stop = 500, 900
+    feature_names = ['polyA', 'U5', 'U5 stem', 'PBS', 'PSI SL1-4']
+    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+                                     minor_af, reference, pheno=None,
+                                     synnonsyn=synnonsyn['genomewide'],
+                                     ws=8, wsp=1, ax=axs[0])
+    # add label and dimension to left-most axis, all other are tied to this one
+    ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
+    ax.set_ylim(ymin, ymax)
+    add_panel_label(ax, 'B', x_offset=-0.15)
+
+    ax.plot([start,reference.annotation["LTR5'"].location.end],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(start, ax.get_ylim()[0]*1.17, "LTR5'", fontsize=fs*0.8, horizontalalignment='left')
+
+    ax.plot([reference.annotation['gag'].location.start, stop],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(stop, ax.get_ylim()[0]*1.17, 'gag', fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_ylim(ymin, ymax)
+
+
+    # frame shift region -- no syn fitness cost here since this is in an overlap
+    start, stop = 2050, 2150
+    feature_names = ['frameshift']
+    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+                                             minor_af, reference, pheno=None,
+                                             ws=8, wsp=1, ax=axs[1])
+
+    ax.plot([start, reference.annotation['gag'].location.end],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(start, ax.get_ylim()[0]*1.17, 'gag', fontsize=fs*0.8, horizontalalignment='left')
+
+    ax.plot([reference.annotation['pol'].location.start,stop],
+            y_second_gene*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
+    ax.text(stop, ax.get_ylim()[0]*(y_second_gene+0.17), 'pol', fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_xticks([2050, 2150])
+    ax.set_ylim(ymin, ymax)
+
+    # plot the cPPT region
+    start, stop = 4750, 5000
+    feature_names = ['A1','D2', 'cPPT']
+    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+                                     minor_af, reference, pheno=None,
+                                     synnonsyn=synnonsyn['genomewide'],
+                                     ws=8, wsp=1, ax=axs[2])
+
+    # add label and dimension to left-most axis, all other are tied to this one
+    ax.set_ylim(ymin, ymax)
+
+    ax.plot([start,reference.annotation["IN"].location.end],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(start, ax.get_ylim()[0]*1.17, "IN", fontsize=fs*0.8, horizontalalignment='left')
+
+    ax.plot([reference.annotation['vif'].location.start, stop],
+            y_second_gene*ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(stop, ax.get_ylim()[0]*(y_second_gene+0.17), 'vif', fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_xticks([4800, 4900])
+    ax.set_ylim(ymin, ymax)
+
+
+    # plot the 3' region
+    start, stop = 9050, 9150
+    feature_names = ['PPT']
+    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+                                             minor_af, reference, pheno=None,
+                                             synnonsyn=synnonsyn['genomewide'],
+                                             ws=8, wsp=1, ax=axs[3])
+
+    ax.plot([start, reference.annotation['nef'].location.end],
+            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
+    ax.text(start, ax.get_ylim()[0]*1.17, 'nef', fontsize=fs*0.8, horizontalalignment='left')
+
+    ax.plot([reference.annotation["LTR3'"].location.start,stop],
+            y_second_gene*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
+    ax.text(stop, ax.get_ylim()[0]*(y_second_gene+0.17), "LTR3'", fontsize=fs*0.8, horizontalalignment='right')
+    ax.set_xticks([9050, 9100,9150])
+    ax.set_ylim(ymin, ymax)
+
+    fig.text(0.5, 0.01, 'Position in HIV-1 reference (HXB2) [bp]',
+             ha='center',
+             fontsize=fs)
+    plt.tight_layout(rect=(0, 0.04, 1, 1),w_pad=-1)
+
+    if fname is not None:
+        for ext in ['.png', '.svg', '.pdf']:
+            plt.savefig(fname+ext)
 
 
 def add_pairing_to_reference(reference):
@@ -175,104 +285,6 @@ def add_pairing_to_reference(reference):
             tmp[rt.translate(i+offset, 'NL4-3')[1]] = p>0
         suskod_data[field]=tmp
     reference.suskod = suskod_data
-
-
-def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
-    '''Plot fitness cost at noncoding features'''
-    from util import add_panel_label
-
-    ymax = 0.25
-    ymin = 0.0005
-
-    fig, axs = plt.subplots(1, 4, sharey=True, figsize =(10,5),
-                            gridspec_kw={'width_ratios':[4, 1, 2.5, 1]})
-
-    # plot the 5' region
-    start, stop = 500, 900
-    feature_names = ['polyA', 'U5', 'U5 stem', 'PBS', 'PSI SL1-4']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
-                                     minor_af, reference, pheno=None,
-                                     synnonsyn=synnonsyn['genomewide'],
-                                     ws=8, wsp=1, ax=axs[0])
-    # add label and dimension to left-most axis, all other are tied to this one
-    ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
-    ax.set_ylim(ymin, ymax)
-    add_panel_label(ax, 'B', x_offset=-0.15)
-
-    ax.plot([start,reference.annotation["LTR5'"].location.end],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(start, ax.get_ylim()[0]*1.12, "LTR5'", fontsize=fs*0.8, horizontalalignment='left')
-
-    ax.plot([reference.annotation['gag'].location.start, stop],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(stop, ax.get_ylim()[0]*1.12, 'gag', fontsize=fs*0.8, horizontalalignment='right')
-    ax.set_ylim(ymin, ymax)
-
-
-    # frame shift region -- no syn fitness cost here since this is in an overlap
-    start, stop = 2050, 2150
-    feature_names = ['frame shift']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
-                                             minor_af, reference, pheno=None,
-                                             ws=8, wsp=1, ax=axs[1])
-
-    ax.plot([start, reference.annotation['gag'].location.end],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(start, ax.get_ylim()[0]*1.12, 'gag', fontsize=fs*0.8, horizontalalignment='left')
-
-    ax.plot([reference.annotation['pol'].location.start,stop],
-            1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
-    ax.text(stop, ax.get_ylim()[0]*1.25, 'pol', fontsize=fs*0.8, horizontalalignment='right')
-    ax.set_xticks([2050, 2150])
-    ax.set_ylim(ymin, ymax)
-
-    # plot the cPPT region
-    start, stop = 4750, 5000
-    feature_names = ['A1','D2', 'cPPT']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
-                                     minor_af, reference, pheno=None,
-                                     synnonsyn=synnonsyn['genomewide'],
-                                     ws=8, wsp=1, ax=axs[2])
-    # add label and dimension to left-most axis, all other are tied to this one
-    ax.set_ylim(ymin, ymax)
-
-    ax.plot([start,reference.annotation["IN"].location.end],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(start, ax.get_ylim()[0]*1.12, "INT", fontsize=fs*0.8, horizontalalignment='left')
-
-    ax.plot([reference.annotation['vif'].location.start, stop],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(stop, ax.get_ylim()[0]*1.12, 'vif', fontsize=fs*0.8, horizontalalignment='right')
-    ax.set_xticks([4800, 4900])
-    ax.set_ylim(ymin, ymax)
-
-
-    # plot the 3' region
-    start, stop = 9050, 9150
-    feature_names = ['PPT']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
-                                             minor_af, reference, pheno=None,
-                                             synnonsyn=synnonsyn['genomewide'],
-                                             ws=8, wsp=1, ax=axs[3])
-
-    ax.plot([start, reference.annotation['nef'].location.end],
-            ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
-    ax.text(start, ax.get_ylim()[0]*1.12, 'nef', fontsize=fs*0.8, horizontalalignment='left')
-
-    ax.plot([reference.annotation["LTR3'"].location.start,stop],
-            1.15*ax.get_ylim()[0]*np.ones(2), lw=5, c='k', alpha=0.7)
-    ax.text(stop, ax.get_ylim()[0]*1.25, "LTR3'", fontsize=fs*0.8, horizontalalignment='right')
-    ax.set_xticks([9050, 9100,9150])
-    ax.set_ylim(ymin, ymax)
-
-    fig.text(0.5, 0.01, 'Position in HIV-1 reference (HXB2) [bp]',
-             ha='center',
-             fontsize=fs)
-    plt.tight_layout(rect=(0, 0.04, 1, 1),w_pad=-1)
-
-    if fname is not None:
-        for ext in ['.png', '.svg', '.pdf']:
-            plt.savefig(fname+ext)
 
 
 def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, new_fig=True, label=None):
@@ -393,7 +405,9 @@ if __name__=="__main__":
         if args.subtype=='B':
             patient_codes = ['p2','p3', 'p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         else:
-            patient_codes = ['p1', 'p2','p3','p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes, no p4/7
+            #FIXME: Fabio does not have consistent files for p7
+            # patient_codes = ['p1', 'p2','p3','p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes
+            patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes
 
         # gag and nef are loaded since they overlap with relevnat non-coding structures
         # and we need to know which positions have synonymous mutations
@@ -437,10 +451,12 @@ if __name__=="__main__":
         synnonsyn_unconstrained['genomewide'][pos] = synnonsyn_unconstrained[gene]
         synnonsyn['genomewide'][pos] = synnonsyn[gene]
 
-    add_pairing_to_reference(reference)
     plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
                            fname='../figures/figure_4B_st_'+args.subtype)
 
+    # Check SHAPE vs fitness
+    #FIXME: ../data/nar-01265-r-2015-File010_pairing.csv is not in the repo
+    #add_pairing_to_reference(reference)
     ws=100
     subset_of_positions = synnonsyn_unconstrained['genomewide']
     #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
