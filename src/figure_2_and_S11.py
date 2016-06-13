@@ -45,7 +45,7 @@ def load_data_KL():
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
-    data.name = 'Fitness costs'
+    data.name = 'fitness costs'
 
     return data
 
@@ -103,7 +103,7 @@ def plot_fit(data_sat, data_pooled):
                )
 
     ax.set_xlabel('days since EDI', fontsize=fs)
-    ax.set_ylabel('Average allele frequency', fontsize=fs)
+    ax.set_ylabel('average allele frequency', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
     ax.set_xticks(np.linspace(0, 0.005, 5))
@@ -153,7 +153,7 @@ def plot_fit(data_sat, data_pooled):
 
     ax.legend(loc='upper right', fontsize=16)
     ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
-    ax.set_ylabel('Fitness cost', fontsize=fs)
+    ax.set_ylabel('fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
     ax.set_xscale('log')
@@ -234,7 +234,7 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
 
     ax.legend(loc='upper right', fontsize=16)
     ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
-    ax.set_ylabel('Fitness cost', fontsize=fs)
+    ax.set_ylabel('fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
     ax.set_xscale('log')
