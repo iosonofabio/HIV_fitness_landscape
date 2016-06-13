@@ -456,7 +456,7 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
         if ni==0:
             ax.set_ylabel('fraction of sites', fontsize=fs)
             ax.set_yscale('linear')
-        ax.set_xlabel('selection coefficient', fontsize=fs)
+        ax.set_xlabel('fitness cost', fontsize=fs)
         ax.set_xticks([0.001, 0.01, 0.1])
         ax.set_xticklabels([r'$<10^{-3}$', r'$10^{-2}$', r'$>10^{-1}$'])
         ax.legend(loc=2, fontsize=fs*0.8)
@@ -516,7 +516,7 @@ def selcoeff_confidence(region, data, fname=None):
         except:
             import ipdb; ipdb.set_trace()
     ax.set_xscale('log')
-    ax.set_xlabel('selection coefficient', fontsize=fs)
+    ax.set_xlabel('fitness cost', fontsize=fs)
     ax.set_ylabel('normalized counts', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
 
@@ -634,7 +634,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
 
     axs[0].legend(loc=1, fontsize=fs*0.8)
     axs[0].set_yscale('log')
-    axs[0].set_ylabel('selection coefficient [1/day]', fontsize=fs)
+    axs[0].set_ylabel('fitness cost [1/day]', fontsize=fs)
     axs[0].set_ylim(0.002, 0.25)
     axs[0].tick_params(labelsize=fs*0.8)
 
@@ -669,7 +669,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     ax.set_yticks([-3,-2,-1])
     ax.set_yticklabels([r'$10^{'+str(i)+'}$' for i in [-3,-2,-1]])
     ax.tick_params(labelsize=0.8*fs)
-    ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
+    ax.set_ylabel('fitness cost [1/day]', fontsize=fs)
     ax.set_xlabel('')
     ax.set_ylim(-3, -0.5)
     ax.legend(loc=1, fontsize=fs, title=None)
