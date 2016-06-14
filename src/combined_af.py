@@ -656,7 +656,7 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     add_panel_label(axs[0], 'A', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/figure_4A_st_' + reference.subtype + '.'+ext)
+        fig.savefig('../figures/figure_3A_st_' + reference.subtype + '.'+ext)
 
 
     # Violin plots of the fitness cost distributions for syn and nonsyn
@@ -841,7 +841,7 @@ if __name__=="__main__":
 
     selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
                           data['mut_rate'],
-                          '../figures/figure_3ABC_st_'+args.subtype)
+                          '../figures/figure_4ABC_st_'+args.subtype)
 
     # Figure 4
     plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)

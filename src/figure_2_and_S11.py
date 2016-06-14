@@ -152,7 +152,7 @@ def plot_fit(data_sat, data_pooled):
                )
 
     ax.legend(loc='upper right', fontsize=16)
-    ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
+    ax.set_xlabel('variability in group M [bits]', fontsize=fs)
     ax.set_ylabel('fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
@@ -233,7 +233,7 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
                )
 
     ax.legend(loc='upper right', fontsize=16)
-    ax.set_xlabel('Variability in group M [bits]', fontsize=fs)
+    ax.set_xlabel('variability in group M [bits]', fontsize=fs)
     ax.set_ylabel('fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
