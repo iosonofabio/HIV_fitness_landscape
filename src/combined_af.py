@@ -514,10 +514,10 @@ def selcoeff_confidence(region, data, fname=None):
 
     scb[scb>0.1]=0.1
     scb[scb<0.001]=0.001
-    fig, ax = plt.subplots(1, 1, figsize=(8,6))
+    fig, ax = plt.subplots(1, 1, figsize=(5,3.5))
     for i in range(1,len(thres)+1):
         try:
-            ind = (which_quantile==i)&(~np.any(np.isnan(sel_coeff_array)))
+            ind = (which_quantile==i)&(~np.any(np.isnan(sel_coeff_array),axis=0))
             npoints = ind.sum()*sel_coeff_array.shape[0]
             ax.plot(np.median(scb[ind,1])*np.ones(2), [0,0.5], c=cols[i+3], lw=4)
             ax.hist(sel_coeff_array[:,ind].flatten(), weights=np.ones(npoints,dtype=float)/npoints,
@@ -532,7 +532,7 @@ def selcoeff_confidence(region, data, fname=None):
     plt.tight_layout()
     region_panels = {'gag': 'D', 'pol': 'A', 'env': 'B', 'nef': 'C', 'vif': 'D',
                      'vpu': 'E', 'vpr': 'F'}
-    add_panel_label(ax, region_panels.get(region, 'D'), x_offset=-0.1)
+    add_panel_label(ax, region_panels.get(region, 'D'), x_offset=-0.2)
 
     if fname is not None:
         for ext in ['png', 'svg', 'pdf']:

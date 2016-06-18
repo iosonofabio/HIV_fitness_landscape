@@ -25,7 +25,7 @@ from hivevo.patients import Patient
 from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
-
+from util import add_panel_label
 from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
 
 
@@ -260,28 +260,46 @@ def get_associations(regions, aa_ref='NL4-3'):
     return associations
 
 
-def fitness_scatter(region, data,total_nonsyn_mutation_rates, associations,
+def fitness_scatter(region, s, associations,
                     reference, annotate_protective=True, fname = None, running_avg=True):
-    s = {region: selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=None)}
     epi = get_optimal_epitopes(region, reference)
     ind = ~np.isnan(s[region])
     print(region, 'fitness costs:', np.median(s[region][ind&(epi>0)]), np.median(s[region][ind&(epi==0)]))
     print(region, 'entropy:', np.median(reference.entropy[ind&(epi>0)]), np.median(reference.entropy[ind&(epi==0)]))
-    plt.figure()
-    vals = s[region][ind&(epi>0)]
-    plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='within')
-    vals = s[region][ind&(epi==0)]
-    plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='outside optimal epitopes')
-    plt.xscale('log')
-    plt.legend()
 
-    entropy_scatter(region, s, associations, reference, fname=None, annotate_protective=annotate_protective,
-                    running_avg=True, xlabel='fitness cost')
+    enrichment, rho, pval = entropy_scatter(region, s, associations, reference, fname=None, annotate_protective=annotate_protective,
+                    running_avg=True, xlabel='fitness cost', xlim = 1e-4)
     plt.xlim([1e-4, 1.2])
+
+    stmp = s[region]
+    stmp[stmp<0.001]=0.001
+    stmp[stmp>0.1]=0.1
+    plt.figure(figsize=(5,3.5))
+    ax=plt.subplot(111)
+    vals = s[region][ind&(epi>0)]
+    #plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='within')
+    plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals), label='within A-list epitopes', alpha=0.5)
+    vals = s[region][ind&(epi==0)]
+    plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals), label='other', alpha=0.5)
+    #plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='outside optimal epitopes')
+    plt.ylabel('fraction of sites', fontsize=fs)
+    plt.xlabel('fitness cost', fontsize=fs)
+    plt.xscale('log')
+    ax.set_xticks([0.001, 0.01, 0.1])
+    ax.set_xticklabels([r'$<10^{-3}$', r'$10^{-2}$', r'$>10^{-1}$'])
+    ax.tick_params(labelsize=0.8*fs)
+    plt.legend(fontsize=0.8*fs, loc=2)
+    plt.tight_layout()
+    if region in ['gag', 'nef']:
+        add_panel_label(ax,'E', x_offset=-.2)
+        for ext in ['png', 'svg', 'pdf']:
+            plt.savefig('../figures/optimal_epitopes_'+region+'_st_'+args.subtype+'.'+ext)
+
+    return  enrichment, rho, pval
 
 def entropy_scatter(region, within_entropy, associations, reference,
                 fname = None, annotate_protective=False, running_avg=True,
-                xlabel='pooled within patient entropy'):
+                xlabel='pooled within patient entropy', xlim=1e-5):
     '''
     scatter plot of cross-sectional entropy vs entropy of averaged
     intrapatient frequencies amino acid frequencies
@@ -328,12 +346,12 @@ def entropy_scatter(region, within_entropy, associations, reference,
 
     plt.ylabel('cross-sectional entropy', fontsize=fs)
     plt.xlabel(xlabel, fontsize=fs)
-    plt.text(0.00002, 3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
+    plt.text(xlim*2, 3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
     plt.legend(loc=4, fontsize=fs*0.8)
     plt.yscale('log')
     plt.xscale('log')
     plt.ylim([0.001, 4])
-    plt.xlim([0.00001, 1.0])
+    plt.xlim([xlim, 1.0])
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
     if fname is not None:
@@ -900,6 +918,7 @@ if __name__=="__main__":
 
     associations = get_associations(regions)
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
+    selcoeff = {region: selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=None) for region in regions}
 
     plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype)
 
@@ -910,15 +929,15 @@ if __name__=="__main__":
     erich = np.zeros((2,2,2))
     for region in regions:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
-        fitness_scatter(region, data, total_nonsyn_mutation_rates, associations, reference)
+        tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference)
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
         if region == 'pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates,
                             fname='../figures/hinkley_comparison_'+args.subtype+'.pdf')
-        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
-                                         '../'+region+'_aa_entropy_scatter_st_'
-                                         +args.subtype+'.pdf', annotate_protective=True)
+#        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
+#                                         '../'+region+'_aa_entropy_scatter_st_'
+#                                        +args.subtype+'.pdf', annotate_protective=True)
 
 
         phenotype_correlations[(region, 'entropy')] = (rho, pval)
@@ -927,17 +946,18 @@ if __name__=="__main__":
         for phenotype, vals in data['pheno'][region].iteritems():
             try:
                 print(phenotype)
-                rho, pval = phenotype_scatter(region, combined_entropy, vals, phenotype)
+                rho, pval = phenotype_scatter(region, selcoeff, vals, phenotype)
                 phenotype_correlations[(region, phenotype)] = (rho, pval)
             except:
                 print("Phenotype scatter failed for:",region, phenotype)
                 phenotype_correlations[(region, phenotype)] = ('NaN', 'NaN')
 
     with open("../data/phenotype_correlation_st_"+args.subtype+".tsv", 'w') as pheno_file:
-        pt = ['entropy']+data['pheno'][regions[0]].keys()
+        pt = ['entropy', 'disorder', 'accessibility']
         pheno_file.write('\t'.join(['gene']+pt)+'\n')
         for region in regions:
-            pheno_file.write('\t'.join([region]+[str(phenotype_correlations[(region, pheno)][0]) for pheno in pt])+'\n')
+            pheno_file.write('\t'.join([region]+
+                [str(np.round(phenotype_correlations[(region, pheno)][0],3)) for pheno in pt])+'\n')
 
     export_selection_coefficients(data, total_nonsyn_mutation_rates, args.subtype)
 

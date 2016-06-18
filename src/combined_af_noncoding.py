@@ -345,7 +345,7 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
             #axs[0].scatter(np.arange(len(ngenes))[ngenes>1], 0.8*np.ones((ngenes>1).sum()), c='k')
 
     if new_fig:
-        for feat in ['polyA', 'U5', 'U5 stem', 'PBS','cPPT', 'A1','PSI SL1-4']+['RRE'] + ['PPT']+['frame shift']+['TAR', 'TATA', 'SP1', 'TCF-1alpha']:
+        for feat in ['polyA', 'U5', 'U5 stem', 'PBS','cPPT', 'A1','PSI SL1-4']+['RRE'] + ['PPT']+['frameshift']+['TAR', 'TATA', 'SP1', 'TCF-1alpha']:
             #axs[0].text(pos[0][0], 0.74, feat)
             for p in features[feat]:
                 axs[0].plot(p, [0.85, 0.85], c='r', lw=3)
@@ -384,6 +384,25 @@ def check_neutrality(minor_af, mut_rates, position_file):
     plt.savefig('../figures/neutral_set_comparison.pdf')
     return s
 
+def RNA_correlation_in_genes(data, minor_af, reference, pairings, synnonsyn, fname = 'test.tsv'):
+    region='genomewide'
+    sc = (data['mut_rate'][region]/(af_cutoff+minor_af[region]))
+    sc[sc>0.1] = 0.1
+    sc[sc<0.001] = 0.001
+
+
+    with open(fname, 'w') as ofile:
+        for region in ['gag', 'pol','nef',  'env', 'vif']:
+            gene_ii = np.in1d(np.arange(len(reference.entropy)), [ii for ii in reference.annotation[region]])
+            stmp = sc[gene_ii]
+            corr = []
+            for pp in pairings:
+                pptmp = pp[gene_ii]
+                ind = (~np.isnan(stmp))&(synnonsyn[gene_ii])
+                corr.append(spearmanr(stmp[ind], pptmp[ind]).correlation)
+
+            ofile.write('\t'.join(map(str, [region] +  [np.round(x,3) for x in corr]))+'\n')
+            print(region, corr)
 
 
 # Script
@@ -456,7 +475,7 @@ if __name__=="__main__":
 
     # Check SHAPE vs fitness
     #FIXME: ../data/nar-01265-r-2015-File010_pairing.csv is not in the repo
-    #add_pairing_to_reference(reference)
+    add_pairing_to_reference(reference)
     ws=100
     subset_of_positions = synnonsyn_unconstrained['genomewide']
     #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
@@ -480,5 +499,7 @@ if __name__=="__main__":
     # check the neutrality of the positions used to determine the neutral mutation rate.
     s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
 
-
+    pairings = [reference.pp, reference.suskod['PPfold, SHAPE']]
+    RNA_correlation_in_genes(data, minor_af, reference, pairings, subset_of_positions,
+                             fname='../data/RNA_phenotype_correlations_st_'+args.subtype+'.tsv')
 
