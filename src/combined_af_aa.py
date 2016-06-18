@@ -213,22 +213,40 @@ def collect_data(patient_codes, regions, subtype):
     return {'af_by_pat':combined_af_by_pat, 'init_codon': initial_codons_by_pat, 'pheno':combined_phenos}
 
 
+def get_optimal_epitopes(region, reference):
+    epi_map = np.zeros_like(reference.entropy, dtype=int)
+    lanl_optimal = pd.read_csv("../data/optimal_ctl_summary.csv")
+    #lanl_optimal = pd.read_csv("../data/ctl_variant.csv")
+    for ii, epi in lanl_optimal.iterrows():
+        try:
+            if ((epi.Protein.lower() == region) or (epi.Protein=='gp160' and region=='env')):
+                if type(epi.loc['HLA']) is str:
+                    if any([x in epi.loc['HLA'] for x in ['B57', 'B*57']]):
+                        epi_map[epi.loc['HXB2 start']-1:epi.loc['HXB2 end']]+=1
+        except:
+            print(ii, epi)
+
+    return epi_map
+
+
 def get_associations(regions, aa_ref='NL4-3'):
     hla_assoc = pd.read_csv("../data/Carlson_el_al_2012_HLAassoc.csv")
     #hla_assoc = pd.read_csv("data/Brumme_et_al_HLAassoc.csv")
+    qvalue_cutoff = 0.1
     associations = {}
     for region in regions:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = 'B')
         L = len(reference.entropy)
         associations[region]={}
         if region=='env':
-            subset = (hla_assoc.loc[:,"Protein"]=='gp120')*(hla_assoc.loc[:,"QValue"]<0.1)
+            subset = (hla_assoc.loc[:,"Protein"]=='gp120')&(hla_assoc.loc[:,"QValue"]<qvalue_cutoff)
             A = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1)
-            subset = (hla_assoc.loc[:,"Protein"]=='gp41')*(hla_assoc.loc[:,"QValue"]<0.1)
+            subset = (hla_assoc.loc[:,"Protein"]=='gp41')&(hla_assoc.loc[:,"QValue"]<qvalue_cutoff)
             B = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"]) + offsets['gp41'])
             hla_assoc_pos = A|B
         else:
-            subset = (hla_assoc.loc[:,"Protein"]==region)*(hla_assoc.loc[:,"QValue"]<0.1)
+            subset = (hla_assoc.loc[:,"Protein"]==region)&(hla_assoc.loc[:,"QValue"]<qvalue_cutoff) \
+                      &np.array(["B*57" in x for x in hla_assoc.loc[:,"HLA"]], dtype=bool)
             if region=="pol":
                 hla_assoc_pos = np.in1d(np.arange(L), np.unique(hla_assoc.loc[subset, "Position"])-1+56)
             else:
@@ -242,8 +260,28 @@ def get_associations(regions, aa_ref='NL4-3'):
     return associations
 
 
+def fitness_scatter(region, data,total_nonsyn_mutation_rates, associations,
+                    reference, annotate_protective=True, fname = None, running_avg=True):
+    s = {region: selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=None)}
+    epi = get_optimal_epitopes(region, reference)
+    ind = ~np.isnan(s[region])
+    print(region, 'fitness costs:', np.median(s[region][ind&(epi>0)]), np.median(s[region][ind&(epi==0)]))
+    print(region, 'entropy:', np.median(reference.entropy[ind&(epi>0)]), np.median(reference.entropy[ind&(epi==0)]))
+    plt.figure()
+    vals = s[region][ind&(epi>0)]
+    plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='within')
+    vals = s[region][ind&(epi==0)]
+    plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='outside optimal epitopes')
+    plt.xscale('log')
+    plt.legend()
+
+    entropy_scatter(region, s, associations, reference, fname=None, annotate_protective=annotate_protective,
+                    running_avg=True, xlabel='fitness cost')
+    plt.xlim([1e-4, 1.2])
+
 def entropy_scatter(region, within_entropy, associations, reference,
-                fname = None, annotate_protective=False, running_avg=True):
+                fname = None, annotate_protective=False, running_avg=True,
+                xlabel='pooled within patient entropy'):
     '''
     scatter plot of cross-sectional entropy vs entropy of averaged
     intrapatient frequencies amino acid frequencies
@@ -268,8 +306,9 @@ def entropy_scatter(region, within_entropy, associations, reference,
     for ni, assoc_ind, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
         tmp_ind = assoc_ind&ind
         plt.scatter(within_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
+        #plt.plot(sorted(within_entropy[region][tmp_ind]+.00003), np.linspace(0,1,tmp_ind.sum()), c=cols[ni], label=label_str)
         if running_avg: # add a running average to the scatter plot averaging over npoints on both axis
-            A = np.array(sorted(zip(combined_entropy[region][tmp_ind]+0.0000, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
+            A = np.array(sorted(zip(within_entropy[region][tmp_ind]+0.0000, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
@@ -281,14 +320,14 @@ def entropy_scatter(region, within_entropy, associations, reference,
     print(enrichment, fisher_exact(enrichment[:,:,1]))
     # add labels to points of positions of interest (positions with protective variation)
     if annotate_protective:
-        A = np.array((combined_entropy[region]+0.00003, xsS+0.005)).T
+        A = np.array((within_entropy[region]+0.00003, xsS+0.005)).T
         for feat, positions in protective_positions[region].iteritems():
             for pos in positions:
                 intra, cross = A[pos+offsets[feat],:]
                 plt.annotate(feat+':' +str(pos), (intra, cross), (intra*1.05, cross*1.05), color='r')
 
     plt.ylabel('cross-sectional entropy', fontsize=fs)
-    plt.xlabel('pooled within patient entropy', fontsize=fs)
+    plt.xlabel(xlabel, fontsize=fs)
     plt.text(0.00002, 3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
     plt.legend(loc=4, fontsize=fs*0.8)
     plt.yscale('log')
@@ -452,7 +491,7 @@ def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nb
         tmp_nu_over_mu = np.ma.array(nu_over_mu)
         tmp_nu_over_mu.mask = np.isnan(nu_over_mu)
         #import ipdb; ipdb.set_trace()
-        tmp_s = 1.0/(tmp_nu_over_mu.mean(axis=0)+1e-5)
+        tmp_s = 1.0/(tmp_nu_over_mu.mean(axis=0)+0.1)
         tmp_s[tmp_s.mask] = np.nan
         s_bs.append(tmp_s)
     if nbootstraps is None:
@@ -864,23 +903,23 @@ if __name__=="__main__":
 
     plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype)
 
-    #sys.exit()
-
     aa_ref = 'NL4-3'
     global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
 
     phenotype_correlations = {}
     erich = np.zeros((2,2,2))
     for region in regions:
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
+        fitness_scatter(region, data, total_nonsyn_mutation_rates, associations, reference)
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
-        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         if region == 'pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates,
                             fname='../figures/hinkley_comparison_'+args.subtype+'.pdf')
         tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
                                          '../'+region+'_aa_entropy_scatter_st_'
                                          +args.subtype+'.pdf', annotate_protective=True)
+
 
         phenotype_correlations[(region, 'entropy')] = (rho, pval)
         erich+=tmp
@@ -938,6 +977,7 @@ if __name__=="__main__":
 #
 #    draw_genome(axs[1], {k:val for k,val in global_ref.annotation.iteritems() if k in ['p17', 'p6', 'p7', 'p24', 'PR', 'RT', 'IN', 'p15', 'nef','gp41', 'vif']})
 
-PhenoCorr_vs_Npat('entropy', data,
-                  figname='../figures/aa_entropy_corr_vs_patients_st_'+args.subtype,
-                  label_str='C' if args.subtype=='any' else 'D')
+    PhenoCorr_vs_Npat('entropy', data,
+                      figname='../figures/aa_entropy_corr_vs_patients_st_'+args.subtype,
+                      label_str='C' if args.subtype=='any' else 'D')
+

@@ -297,7 +297,16 @@ def process_average_allele_frequencies(data, regions,
     return output
 
 
-def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None, running_avg=True):
+def fitness_scatter(region, minor_af, mut_rates, synnonsyn, reference, fname = None, running_avg=True):
+    s = {region:mut_rates[region]/(minor_af[region]+af_cutoff)}
+    entropy_scatter(region, s, synnonsyn, reference, fname=None,
+                    running_avg=running_avg, xlabel='fitness cost')
+    plt.xlim([1e-4, 1.2])
+
+
+def entropy_scatter(region, within_entropy, synnonsyn, reference,
+                    xlabel = 'pooled within patient entropy',
+                    fname = None, running_avg=True):
     '''
     scatter plot of cross-sectional entropy vs entropy of averaged intrapatient frequencies
     '''
@@ -334,7 +343,7 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference, fname = None, 
     print(enrichment, fisher_exact(enrichment[:,:,1]))
 
     plt.ylabel('cross-sectional entropy', fontsize=fs)
-    plt.xlabel('pooled within patient entropy', fontsize=fs)
+    plt.xlabel(xlabel, fontsize=fs)
     plt.text(0.00002, 1.3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
     plt.legend(loc=4, fontsize=fs*0.8)
     plt.yscale('log')
@@ -686,7 +695,7 @@ def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_a
     E = np.zeros((2,2,2))
     for region in regions:
         E += entropy_scatter(region, combined_entropy, synnonsyn, reference,
-                             '../figures/'+region+'_entropy_scatter.png')
+                             fname='../figures/'+region+'_entropy_scatter.png')
         fraction_diverse(region, minor_af, synnonsyn,
                          '../figures/'+region+'_minor_allele_frequency.pdf')
     print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
@@ -833,6 +842,7 @@ if __name__=="__main__":
 
     # Figure 3
     for region in regions:
+        fitness_scatter(region, minor_af, data['mut_rate'], synnonsyn, reference, minor_af)
         selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
                                data['mut_rate'],
                               '../figures/'+region+'_sel_coeff_st_'+args.subtype, ref=reference)

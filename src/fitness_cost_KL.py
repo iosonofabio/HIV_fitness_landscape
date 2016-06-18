@@ -198,7 +198,7 @@ if __name__=="__main__":
     Smedians = [np.median(ref.entropy[Squant[i]['ind']]) for i in range(q)]
 
 
-    patient_names = ['p1','p2','p3','p5','p6','p8','p9','p11']
+    patient_names = ['p1','p2','p5','p6','p8','p9','p11']
     # 'p4', 'p7' do not exist
     # 'p10' - weird messages from Patient class
     # p3, p8 - True mask for some time points
