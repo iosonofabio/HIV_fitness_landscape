@@ -260,29 +260,30 @@ def get_associations(regions, aa_ref='NL4-3'):
     return associations
 
 
-def fitness_scatter(region, s, associations,
-                    reference, annotate_protective=True, fname = None, running_avg=True):
-    epi = get_optimal_epitopes(region, reference)
-    ind = ~np.isnan(s[region])
-    print(region, 'fitness costs:', np.median(s[region][ind&(epi>0)]), np.median(s[region][ind&(epi==0)]))
-    print(region, 'entropy:', np.median(reference.entropy[ind&(epi>0)]), np.median(reference.entropy[ind&(epi==0)]))
-
-    enrichment, rho, pval = entropy_scatter(region, s, associations, reference, fname=None, annotate_protective=annotate_protective,
-                    running_avg=True, xlabel='fitness cost', xlim = 1e-4)
-    plt.xlim([1e-4, 1.2])
-
-    stmp = s[region]
-    stmp[stmp<0.001]=0.001
-    stmp[stmp>0.1]=0.1
-    plt.figure(figsize=(5,3.5))
+def fitness_costs_in_optimal_epis(regions, s):
+    cols = sns.color_palette()
+    plt.figure(figsize=(8,6))
     ax=plt.subplot(111)
-    vals = s[region][ind&(epi>0)]
-    #plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='within')
-    plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals), label='within A-list epitopes', alpha=0.5)
-    vals = s[region][ind&(epi==0)]
-    plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals), label='other', alpha=0.5)
-    #plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label='outside optimal epitopes')
-    plt.ylabel('fraction of sites', fontsize=fs)
+    for ri, region in enumerate(regions):
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
+        epi = get_optimal_epitopes(region, reference)
+        ind = ~np.isnan(s[region])
+        print(region, 'fitness costs:', np.median(s[region][ind&(epi>0)]), np.median(s[region][ind&(epi==0)]))
+        print(region, 'entropy:', np.median(reference.entropy[ind&(epi>0)]), np.median(reference.entropy[ind&(epi==0)]))
+
+        stmp = np.copy(s[region])
+        stmp[stmp<0.001]=0.001
+        stmp[stmp>0.1]=0.1
+        vals = stmp[ind&(epi>0)]
+        plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label=region+ ', A-list epitopes', c=cols[ri], lw=2)
+#        plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals),
+#                 label='within A-list epitopes', alpha=0.5)
+        vals = stmp[ind&(epi==0)]
+#        plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals),
+#                 label='other', alpha=0.5)
+        plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label=region+ ', outside epitopes', ls='--', c=cols[ri], lw=2)
+
+    plt.ylabel('fraction cost<X', fontsize=fs)
     plt.xlabel('fitness cost', fontsize=fs)
     plt.xscale('log')
     ax.set_xticks([0.001, 0.01, 0.1])
@@ -290,11 +291,18 @@ def fitness_scatter(region, s, associations,
     ax.tick_params(labelsize=0.8*fs)
     plt.legend(fontsize=0.8*fs, loc=2)
     plt.tight_layout()
-    if region in ['gag', 'nef']:
-        add_panel_label(ax,'E', x_offset=-.2)
-        for ext in ['png', 'svg', 'pdf']:
-            plt.savefig('../figures/optimal_epitopes_'+region+'_st_'+args.subtype+'.'+ext)
+    #add_panel_label(ax,'E', x_offset=-.2)
+    for ext in ['png', 'svg', 'pdf']:
+        plt.savefig('../figures/optimal_epitopes_st_'+args.subtype+'.'+ext)
 
+
+
+def fitness_scatter(region, s, associations,
+                    reference, annotate_protective=True, fname = None, running_avg=True):
+
+    enrichment, rho, pval = entropy_scatter(region, s, associations, reference, fname=fname,
+                            annotate_protective=annotate_protective,
+                            running_avg=True, xlabel='fitness cost', xlim = 1e-4)
     return  enrichment, rho, pval
 
 def entropy_scatter(region, within_entropy, associations, reference,
@@ -925,11 +933,15 @@ if __name__=="__main__":
     aa_ref = 'NL4-3'
     global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
 
+    fitness_costs_in_optimal_epis(['gag', 'nef'], selcoeff)
+
     phenotype_correlations = {}
     erich = np.zeros((2,2,2))
     for region in regions:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
-        tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference)
+        tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference,
+                                            fname='../figures/'+region+'_aa_fitness_scatter_st_'
+                                                    +args.subtype+'.pdf')
         selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
 
         if region == 'pol':
