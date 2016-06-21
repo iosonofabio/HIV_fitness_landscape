@@ -45,29 +45,20 @@ drug_muts = {'PI':{'offset': 56 - 1,
                     'mutations': [('L', 100, 'I'),('K', 101, 'PEH'), ('K', 103,'N'),
                                 ('V', 106, 'AM'),('E', 138, 'K'),('V', 179, 'DEF'), ('Y', 181, 'CIV'),
                                 ('Y', 188, 'LCH'),('G',190,'ASEQ'), ('F', 227,'LC'), ('M', 230,'L')]
-                   }
+                   },
+             #http://hivdb.stanford.edu/pages/download/resistanceMutations_handout.pdf
+             # offset includes RT and p15 (RNase H)
+             'INI': {'offset': 56 + 99 + 560 - 1,
+                     'mutations': [('T', 66, 'IAK'),
+                                   ('E', 92, 'Q'),
+                                   ('E', 138, 'KA'),
+                                   # NOTE: G140SAC has a very low neutral mut rate, so we are unable to calculate the cost faithfully
+                                   #('G', 140, 'SAC'),
+                                   ('Y', 143, 'CRH'),
+                                   ('S', 147, 'G'),
+                                   ('Q', 148, 'HRK'),
+                                   ('N', 155, 'H')]},
             }
-protective_positions = {
-    'gag':{'gag':[12, 26, 28,79,147, 242, 248, 264, 268, 340, 357, 397, 403, 437]},
-    'nef':{'nef':[71,81, 83, 85, 92, 94, 102,105,116,120,126,133,135]},
-    'pol':{
-    'PR':[35,93],
-    'RT':[135, 245,277,369,395],
-    'INT':[11,32,119,122,124],},
-    'env':{'gp120':[], 'gp41':[]},
-    'vif':{'vif':[]},
-}
-offsets = {
-    'gag':-1,
-    'PR':55,
-    'nef':-1,
-    'RT':55+99,
-    'INT':55+99+440+120,
-    'gp120':-1,
-    'gp41':-1+481,
-    'env':-1,
-    'vif':-1
-}
 
 
 
@@ -85,7 +76,7 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
 
     drug_afs_items = []
     mut_types = []
-    drug_classes = ['PI', 'NRTI', 'NNRTI']
+    drug_classes = ['PI', 'NRTI', 'NNRTI', 'INI']
     for prot in drug_classes:
         drug_afs = {}
         drug_mut_rates = {}
@@ -137,26 +128,30 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
 
     # Add the number of missing points at the bottom of the plot, and the cost
     # at the top
-    dd = afdr.iloc[[0, 1, 2, 3]].copy()
-    dd.index = ['x', 'freq', 'size', 'cost']
+    dd = afdr.iloc[[0, 1, 2, 3, 4]].copy()
+    dd.index = ['x', 'freq', 'size', 'cost', 'mr']
     dd.loc['x'] = np.arange(dd.shape[1])
     dd.loc['freq'] = 2e-5
     dd.loc['n'] = afdr.shape[0] - (afdr > 1e-4).sum(axis=0)
     dd.loc['size'] = dd.loc['n']**(1.4) + 13
     dd.loc['cost'] = 1.0 / afdr.fillna(0).mean(axis=0)
+    dd.loc['mr'] = 0
     # NOTE: the first 6 mutations are in PR, the rest in RT
     import re
     from Bio.Seq import translate
     reference = HIVreference(refname='HXB2', load_alignment=False)
     seq_PR = reference.annotation['PR'].extract(reference.seq)
     seq_RT = reference.annotation['RT'].extract(reference.seq)
+    seq_IN = reference.annotation['IN'].extract(reference.seq)
     murate = load_mutation_rates()['mu']
     for i, mut in enumerate(dd.T.index):
         mr = 0
         if i < 6:
             seq_tmp = seq_PR
-        else:
+        elif i < 6 + 5 + 4:
             seq_tmp = seq_RT
+        else:
+            seq_tmp = seq_IN
         aa_from, pos, aas_to = re.sub('([A-Z])(\d+)([A-Z]+)', r'\1_\2_\3', mut).split('_')
         cod = str(seq_tmp.seq[(int(pos) - 1) * 3: int(pos) * 3])
         for pos_cod in xrange(3):
@@ -168,6 +163,7 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
                     mr += murate[cod[pos_cod]+'->'+nuc]
 
         dd.loc['cost', mut] *= mr
+        dd.loc['mr', mut] = mr
 
     for im, (mutname, s) in enumerate(dd.T.iterrows()):
         ax.scatter(s['x'], s['freq'],
@@ -180,9 +176,11 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
         ax.text(s['x'], s['freq'], str(int(s['n'])), fontsize=fs, ha='center', va='center')
 
     plt.yscale('log')
-    plt.xticks(rotation=40)
+    plt.xticks(rotation=50)
     plt.ylabel('minor variant frequency', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
+    for tick in ax.xaxis.get_major_ticks():
+        tick.label.set_horizontalalignment('right')
 
     # Fitness cost at the top
     ax1 = axs[0]
@@ -191,6 +189,7 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     ax1.set_xticklabels([])
     ax1.set_ylim(1e-3, 1)
     ax1.set_yticks([1e-3, 1e-2, 1e-1, 1])
+    ax1.yaxis.set_tick_params(labelsize=fs*0.8)
     ax1.set_yscale('log')
     ax1.set_ylabel('cost', fontsize=fs)
     for im, (mut, y) in enumerate(dd.loc['cost'].iteritems()):
@@ -236,7 +235,7 @@ if __name__=="__main__":
     plt.ion()
 
     parser = argparse.ArgumentParser(description='fitness costs of drug resistance mutations')
-    parser.add_argument('--subtype', choices=['B', 'any'], default='B',
+    parser.add_argument('--subtype', choices=['B', 'any'], default='any',
                         help='subtype to compare against')
     args = parser.parse_args()
 
@@ -249,4 +248,4 @@ if __name__=="__main__":
             data = cPickle.load(ifile)
 
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
-    plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype)
+    plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype+'_withcost')
