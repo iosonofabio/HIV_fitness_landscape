@@ -33,14 +33,6 @@ from combined_af_aa import calc_amino_acid_mutation_rates
 
 
 # Globals
-fs=16
-ERR_RATE = 2e-3
-WEIGHT_CUTOFF = 500
-SAMPLE_AGE_CUTOFF = 2 # years
-
-ls = {'gag':'-', 'pol':'--', 'nef':'-.'}
-cols = sns.color_palette()
-
 drug_muts = {'PI':{'offset': 56 - 1,
                     'mutations':  [('L', 24, 'I'), ('V', 32, 'I'), ('M', 46, 'IL'), ('I', 47, 'VA'),
                         ('G', 48, 'VM'), ('I', 50, 'LV'), ('I', 54, 'VTAM'), ('L', 76, 'V'),
@@ -84,7 +76,8 @@ def plot_drug_resistance_mutations(data, aa_mutation_rates, fname=None):
     '''Plot the frequency of drug resistance mutations'''
     import matplotlib.patches as patches
 
-    region='pol'
+    fs = 16
+    region = 'pol'
     pcodes = data['init_codon'][region].keys()
 
     fig, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [1, 6]})
