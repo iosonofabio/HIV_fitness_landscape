@@ -32,7 +32,7 @@ from util import add_binned_column, boot_strap_patients
 # Functions
 def load_data_saturation():
     import cPickle as pickle
-    fn = '../data/fitness_cost_saturation_plot.pickle'
+    fn = '../data/fitness_saturation/fitness_cost_saturation_plot.pickle'
     with open(fn, 'r') as f:
         data = pickle.load(f)
     return data
@@ -40,8 +40,8 @@ def load_data_saturation():
 
 def load_data_KL():
     '''Load data from Vadim's KL approach'''
-    S_center = np.loadtxt('../data/genomewide_smuD_KL_quant_medians.txt')
-    s_mean, s_std = np.loadtxt('../data/genomewide_smuD_KLmu_multi_boot.txt')[:,:-2]
+    S_center = np.loadtxt('../data/fitness_KL/genomewide_smuD_KL_quant_medians.txt')
+    s_mean, s_std = np.loadtxt('../data/fitness_KL/genomewide_smuD_KLmu_multi_boot.txt')[:,:-2]
 
     data = pd.DataFrame({'mean': s_mean, 'std': s_std}, index=S_center)
     data.index.name = 'Entropy'
@@ -50,10 +50,10 @@ def load_data_KL():
     return data
 
 
-def load_data_pooled():
+def load_data_pooled(avg='harmonic'):
     '''Load data from the pooled allele frequencies'''
     import cPickle as pickle
-    with open('../data/combined_af_avg_selection_coeff_st_any.pkl', 'r') as f:
+    with open('../data/fitness_pooled/pooled_'+avg+'_selection_coeff_st_any.pkl', 'r') as f:
         caf_s = pickle.load(f)
     return caf_s
 
@@ -103,7 +103,7 @@ def plot_fit(data_sat, data_pooled):
                )
 
     ax.set_xlabel('days since EDI', fontsize=fs)
-    ax.set_ylabel('average allele frequency', fontsize=fs)
+    ax.set_ylabel('average SNP frequency', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
     ax.set_xticks(np.linspace(0, 0.005, 5))
@@ -177,7 +177,7 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
 
     palette = sns.color_palette('colorblind')
 
-    fig_width = 5
+    fig_width = 6
     fs = 16
     fig, ax = plt.subplots(1, 1,
                            figsize=(fig_width, 0.9 * fig_width))
@@ -221,26 +221,27 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
                )
 
     # B3: pooled
-    x = data_pooled['all'][:-1, 0]
-    y = data_pooled['all'][:-1, 1]
-    dy = data_pooled['all_std'][:-1, 1]
-    ax.errorbar(x, y, yerr=dy,
-                ls='-',
-                marker='o',
-                lw=2,
-                color=palette[2],
-                label='Pooled',
-               )
+    for avg, d in data_pooled.iteritems():
+        x = d['all'][:-1, 0]
+        y = d['all'][:-1, 1]
+        dy = d['all_std'][:-1, 1]
+        ax.errorbar(x, y, yerr=dy,
+                    ls='-',
+                    marker='o',
+                    lw=2,
+                    color=palette[2],
+                    label='Pooled - '+avg +' mean',
+                   )
 
-    ax.legend(loc='upper right', fontsize=16)
+    ax.legend(loc='lower left', fontsize=fs*0.8)
     ax.set_xlabel('variability in group M [bits]', fontsize=fs)
     ax.set_ylabel('fitness cost', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.xaxis.set_tick_params(labelsize=fs)
-    ax.yaxis.set_tick_params(labelsize=fs)
+    ax.xaxis.set_tick_params(labelsize=fs*0.8)
+    ax.yaxis.set_tick_params(labelsize=fs*0.8)
 
 
     plt.tight_layout()
@@ -256,6 +257,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Figure 2')
     parser.add_argument('--KL', action='store_true',
                         help='include KL estimates')
+    parser.add_argument('--all', action='store_true',
+                        help='include geometric and arithmetic average')
     args = parser.parse_args()
 
     data_sat = load_data_saturation()
@@ -268,6 +271,13 @@ if __name__ == '__main__':
 
     if args.KL:
         data_KL = load_data_KL()
+        if args.all:
+            data_pooled = {avg:load_data_pooled(avg=avg)
+                        for avg in ['harmonic', 'arithmetic']}
+        else:
+            data_pooled = {avg:load_data_pooled(avg=avg)
+                        for avg in ['harmonic']}
+
         plot_fit_withKL(data_sat, data_KL, data_pooled)
         for ext in ['png', 'pdf', 'svg']:
             plt.savefig('../figures/figure_S11'+'.'+ext)

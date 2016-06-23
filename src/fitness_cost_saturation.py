@@ -247,7 +247,7 @@ def fit_fitness_cost(data, plot=True, save=True, bootstrap=True, mu=None):
 
     if save:
         import cPickle as pickle
-        fn = '../data/fitness_cost_saturation_plot.pickle'
+        fn = '../data/fitness_saturation/fitness_cost_saturation_plot.pickle'
         with open(fn, 'w') as f:
             pickle.dump(output, f, -1)
 
@@ -353,7 +353,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Intermediate data are saved to file for faster access later on
-    fn = '../data/fitness_cost_data.pickle'
+    fn = '../data/fitness_saturation/fitness_cost_data.pickle'
     if args.no_sweeps:
         fn = fn[:-7]+'_nosweep.pickle'
     if not os.path.isfile(fn) or args.regenerate:

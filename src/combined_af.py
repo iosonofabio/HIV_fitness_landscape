@@ -28,7 +28,7 @@ import seaborn as sns
 from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.af_tools import divergence
-from util import load_mutation_rates
+from util import load_mutation_rates, draw_genome
 
 
 # Globals
@@ -62,72 +62,6 @@ def running_average(obs, ws):
         import ipdb; ipdb.set_trace()
         tmp_vals = 0.5*np.ones_like(obs, dtype=float)
     return tmp_vals
-
-
-def draw_genome(annotations,
-                ax=None,
-                rows=4,
-                readingframe=True, fs=9,
-                y1=0,
-                height=1,
-                pad=0.2):
-    '''Draw genome boxes'''
-    from matplotlib.patches import Rectangle
-    from Bio.SeqFeature import CompoundLocation
-
-    if ax is None:
-        fig, ax = plt.subplots(1, 1)
-
-    ax.set_ylim([-pad,rows*(height+pad)])
-    anno_elements = []
-    for name, feature in annotations.iteritems():
-        if type(feature.location) is CompoundLocation:
-            locs = feature.location.parts
-        else:
-            locs = [feature.location]
-        for li,loc in enumerate(locs):
-            x = [loc.nofuzzy_start, loc.nofuzzy_end]
-            anno_elements.append({'name': name,
-                                  'x1': x[0],
-                                  'x2': x[1],
-                                  'width': x[1] - x[0]})
-            if name[0]=='V':
-                anno_elements[-1]['ri']=3
-            elif li:
-                anno_elements[-1]['ri']=(anno_elements[-2]['ri'] + ((x[0] - anno_elements[-2]['x2'])%3))%3
-            else:
-                anno_elements[-1]['ri']=x[0]%3
-
-    anno_elements.sort(key = lambda x:x['x1'])
-    for ai, anno in enumerate(anno_elements):
-        if readingframe:
-            anno['y1'] = y1 + (height + pad) * anno['ri']
-        else:
-            anno['y1'] = y1 + (height + pad) * (ai%rows)
-        anno['y2'] = anno['y1'] + height
-        anno['height'] = height
-
-    for anno in anno_elements:
-        r = Rectangle((anno['x1'], anno['y1']),
-                      anno['width'],
-                      anno['height'],
-                      facecolor=[0.8] * 3,
-                      edgecolor='k',
-                      label=anno['name'])
-
-        xt = anno['x1'] + 0.5 * anno['width']
-        yt = anno['y1'] + 0.2 * height + height * (anno['width']<500)
-        anno['x_text'] = xt
-        anno['y_text'] = yt
-
-        ax.add_patch(r)
-        ax.text(xt, yt,
-                anno['name'],
-                color='k',
-                fontsize=fs,
-                ha='center')
-
-    return pd.DataFrame(anno_elements)
 
 
 def patient_bootstrap(afs):
@@ -297,40 +231,47 @@ def process_average_allele_frequencies(data, regions,
     return output
 
 
+
 def fitness_scatter(region, minor_af, mut_rates, synnonsyn, reference, fname = None, running_avg=True):
-    s = {region:mut_rates[region]/(minor_af[region]+af_cutoff)}
-    entropy_scatter(region, s, synnonsyn, reference, fname=None,
-                    running_avg=running_avg, xlabel='fitness cost')
-    plt.xlim([1e-4, 1.2])
-
-
-def entropy_scatter(region, within_entropy, synnonsyn, reference,
-                    xlabel = 'pooled within patient entropy',
-                    fname = None, running_avg=True):
     '''
-    scatter plot of cross-sectional entropy vs entropy of averaged intrapatient frequencies
+    scatter intrapatient fitness estimates vs cross-sectional entropy
+    '''
+    # calculate selection coefficients
+    s =  mut_rates[region]/(minor_af[region]+af_cutoff)
+    s[s>1] = 1.0
+    scatter_vs_entropy(region, {region:s}, synnonsyn, reference, fname=None,
+                    running_avg=running_avg, xlabel='fitness cost', xlim=(1e-4, 1.2))
+
+
+def scatter_vs_entropy(region, data_to_scatter, synnonsyn, reference,
+                    xlabel = 'pooled within patient entropy',
+                    fname = None, running_avg=True, xlim=[1e-5, 0.3],
+                    enrichment_thresholds = (.0, 0.0001, 10.0)):
+    '''
+    scatter plot of data such as fitness costs, intra patient diversity, etc
+    vs cross-sectional entropy. In addition, the function return the
+    enrichment of nonsyn mutations in the high entropy, low input data corner
     '''
     xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
-    ind = (xsS>=0.000)&(~np.isnan(within_entropy[region]))
+    ind = (xsS>=0.000)&(~np.isnan(data_to_scatter[region]))
     print(region)
-    print("Pearson:", pearsonr(within_entropy[region][ind], xsS[ind]))
-    rho, pval = spearmanr(within_entropy[region][ind], xsS[ind])
+    print("Pearson:", pearsonr(data_to_scatter[region][ind], xsS[ind]))
+    rho, pval = spearmanr(data_to_scatter[region][ind], xsS[ind])
     print("Spearman:", rho, pval)
 
     npoints=20
     thres_xs = [0.0, 0.1, 10.0]
     thres_xs = zip(thres_xs[:-1],thres_xs[1:])
     nthres_xs=len(thres_xs)
-    thres_in = [0.0, 0.0001, 10.0]
-    thres_in = zip(thres_in[:-1],thres_in[1:])
+    thres_in = zip(enrichment_thresholds[:-1],enrichment_thresholds[1:])
     nthres_in=len(thres_in)
     enrichment = np.zeros((2,nthres_in, nthres_xs), dtype=int)
     plt.figure(figsize = (7,6))
     for ni, syn_ind, label_str in ((0, ~synnonsyn[region], 'nonsynymous'), (2,synnonsyn[region], 'synonymous')):
         tmp_ind = ind&syn_ind
-        plt.scatter(within_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
+        plt.scatter(data_to_scatter[region][tmp_ind], xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
         if running_avg:
-            A = np.array(sorted(zip(within_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
+            A = np.array(sorted(zip(data_to_scatter[region][tmp_ind], xsS[tmp_ind]+0.005), key=lambda x:x[0]))
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
@@ -339,17 +280,14 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference,
                 for ti2,(tl2, tu2) in enumerate(thres_xs):
                     enrichment[ni>0, ti1, ti2] = np.sum((A[:,0]>=tl1)&(A[:,0]<tu1)&(A[:,1]>=tl2)&(A[:,1]<tu2))
 
-    from scipy.stats import fisher_exact
-    print(enrichment, fisher_exact(enrichment[:,:,1]))
-
     plt.ylabel('cross-sectional entropy', fontsize=fs)
     plt.xlabel(xlabel, fontsize=fs)
-    plt.text(0.00002, 1.3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
+    plt.text(xlim[0]*2, 1.3, r"Combined Spearman's $\rho="+str(round(rho,2))+"$", fontsize=fs)
     plt.legend(loc=4, fontsize=fs*0.8)
     plt.yscale('log')
     plt.xscale('log')
     plt.ylim([0.001, 2])
-    plt.xlim([0.00001, .3])
+    plt.xlim(xlim)
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
     if fname is not None:
@@ -358,7 +296,10 @@ def entropy_scatter(region, within_entropy, synnonsyn, reference,
 
 
 def fraction_diverse(region, minor_af, synnonsyn, fname=None):
-    '''Cumulative figures of the frequency distributions'''
+    '''
+    Cumulative figures of the frequency distributions
+    THIS IS NOT USED IN THE MANUSCRIPT
+    '''
     plt.figure()
     for ni, ind, label_str in ((0, ~synnonsyn[region], 'nonsynonymous'), (2,synnonsyn[region], 'synonymous')):
         tmp_ind = ind&(~np.isnan(minor_af[region]))
@@ -373,10 +314,13 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
     if fname is not None:
         plt.savefig(fname)
 
+
 def entropy_correlation_vs_npat(region, data, reference):
     '''
     evaluate entropy within/cross-sectional correlation for subsets of patients
     of different size. returns a dictionary with rank correlation coefficients
+    where the keys are number of patients. Each entry is  alist of different
+    patient boot straps
     '''
     from scipy.special import binom
     from random import sample
@@ -394,6 +338,7 @@ def entropy_correlation_vs_npat(region, data, reference):
             within_cross_correlation[n].append(spearmanr(xsS[ind], withS[ind])[0])
 
     return within_cross_correlation
+
 
 def SvsNpat(data, reference, figname=None, label_str=''):
     '''
@@ -422,10 +367,11 @@ def SvsNpat(data, reference, figname=None, label_str=''):
 
 
 
-def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates, fname=None, ref=None):
+def fitnesscost_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates, fname=None, ref=None):
     '''
     produce figure of distribution of selection coefficients separately for
-    synonymous and nonsynonymous sites.
+    synonymous, nonsynonymous sites, and synonymous sites in reading frame overlaps.
+    FIGURE 4 of the manuscript
     '''
     from util import add_panel_label
 
@@ -433,8 +379,8 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
         if not hasattr(ref, 'fitness_cost'):
             ref.fitness_cost = np.zeros_like(ref.entropy)
     fig, axs = plt.subplots(1, 3, sharey=True, figsize=(10,6))
-    #plt.title(region+' selection coefficients')
-    if type(regions)==str:
+
+    if type(regions)==str: # if only one region is passed as string
         regions = [regions]
     for ni,ax,label_str in ((0, axs[0], 'synonymous'),
                             (1, axs[1], 'syn-overlaps'),
@@ -479,9 +425,9 @@ def selcoeff_distribution(regions, minor_af, synnonsyn, synnonsyn_uc, mut_rates,
             plt.savefig(fname+'.'+ext)
 
 
-def selcoeff_confidence(region, data, fname=None):
+def fitnesscost_confidence(region, data, ax=None, fname=None):
     '''
-    bootstrap the selection coefficients and make distributions of the bootstrapped
+    bootstrap the fitness cost estimates and make distributions of the bootstrapped
     values for subsets of sites with a defined median. this should give an impression
     of how variable the estimates are. three such distributions are combined in one
     figure
@@ -514,7 +460,8 @@ def selcoeff_confidence(region, data, fname=None):
 
     scb[scb>0.1]=0.1
     scb[scb<0.001]=0.001
-    fig, ax = plt.subplots(1, 1, figsize=(5,3.5))
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8,6))
     for i in range(1,len(thres)+1):
         try:
             ind = (which_quantile==i)&(~np.any(np.isnan(sel_coeff_array),axis=0))
@@ -527,26 +474,27 @@ def selcoeff_confidence(region, data, fname=None):
     ax.set_xscale('log')
     ax.set_xlabel('fitness cost', fontsize=fs)
     ax.set_ylabel('normalized counts', fontsize=fs)
-    plt.tick_params(labelsize=fs*0.8)
-
-    plt.tight_layout()
-    region_panels = {'gag': 'G', 'pol': 'A', 'env': 'B', 'nef': 'C', 'vif': 'D',
-                     'vpu': 'E', 'vpr': 'F'}
-    add_panel_label(ax, region_panels[region], x_offset=-0.2)
+    ax.tick_params(labelsize=fs*0.8)
+    region_panels = {'gag': 'A', 'pol': 'B', 'env': 'E', 'nef': 'F', 'vif': 'C',
+                     'vpu': 'E', 'vpr': 'G'}
+    ax.text(0.1, 0.9, region,
+            transform=ax.transAxes,
+            fontsize=fs*1.5)
 
     if fname is not None:
+        plt.tight_layout()
         for ext in ['png', 'svg', 'pdf']:
             plt.savefig(fname+'.'+ext)
 
 
-def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
-                        figname=None,
+def fitnesscost_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
                         dataname=None,
                         smoothing='harmonic'):
-    fig, ax = plt.subplots()
+    '''
+    determines the average fitness costs in different cross-sectional quantiles
+    '''
     npoints=20
     avg_sel_coeff = {}
-    #plt.title(region+' selection coefficients')
     if type(regions)==str:
         regions=[regions]
     for ni,label_str in ((0,'synonymous'), (1,'nonsynonymous'), (2,'all')):
@@ -560,16 +508,11 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
             entropy.append(xsS[ind])
 
         s = np.concatenate(s)
+        s[s>0.1] = 0.1
         entropy = np.concatenate(entropy)
-        if label_str!='all':
-            ax.scatter(entropy, s, c=cols[ni])
 
         A = np.array(sorted(zip(entropy+0.001, s), key=lambda x:x[0]))
-        A = A[~np.isnan(A[:,1]),:]
-        #ax.plot(np.exp(np.convolve(np.log(A[:,0]), 1.0*np.ones(npoints)/npoints, mode='valid')),
-        #            np.exp(np.convolve(np.log(A[:,1]), 1.0*np.ones(npoints)/npoints, mode='valid')), c=cols[ni], label=label_str, lw=3)
-        #ax.plot(np.convolve(A[:,0], 1.0*np.ones(npoints)/npoints, mode='valid'),
-        #        np.convolve(A[:,1], 1.0*np.ones(npoints)/npoints, mode='valid'), c=cols[ni], label=label_str, lw=3)
+        A = A[~np.isnan(A[:,1]),:] # remove points with out data
 
         entropy_thresholds =  np.array(np.linspace(0,A.shape[0],8), int)
         entropy_boundaries = zip(entropy_thresholds[:-1], entropy_thresholds[1:])
@@ -581,27 +524,17 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
                                             (avg_inv**-2)*np.std(1.0/A[li:ui,1], axis=0)/np.sqrt(ui-li))
                                             for (li,ui), (_a,avg_inv) in zip(entropy_boundaries,tmp_mean_inv)])
-        elif smoothing=='median':
-            avg_sel_coeff[label_str] = np.array([np.median(A[li:ui,:], axis=0) for li,ui in entropy_boundaries])
-            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.std(A[li:ui,1], axis=0))
+        elif smoothing=='arithmetic':
+            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0], axis=0), np.mean(A[li:ui,1], axis=0))
+                                                for li,ui in entropy_boundaries])
+            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.std(A[li:ui,1], axis=0)/np.sqrt(ui-li))
                                                         for li,ui in entropy_boundaries])
         elif smoothing=='geometric':
             avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), np.exp(np.mean(np.log(A[li:ui,1]), axis=0)))
                                                  for li,ui in entropy_boundaries])
-            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.exp(np.std(np.log(A[li:ui,1], axis=0))))
+            avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
+                                              np.exp(np.mean(np.log(A[li:ui,1])))*np.exp(-np.std(np.log(A[li:ui,1]), axis=0)/np.sqrt(ui-li)))
                                                         for li,ui in entropy_boundaries])
-
-        ax.plot(avg_sel_coeff[label_str][:,0], avg_sel_coeff[label_str][:,1], lw=3)
-
-    ax.legend()
-    ax.set_yscale('log')
-    ax.set_xscale('log')
-    ax.set_ylabel('Fitness cost')
-    ax.set_xlabel('Variability in group M [bits]')
-
-    plt.tight_layout()
-    if figname is not None:
-        plt.savefig(figname)
 
     if dataname is not None:
         with open(dataname, 'w') as ofile:
@@ -610,7 +543,7 @@ def selcoeff_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
     return avg_sel_coeff
 
 
-def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn, reference, ws=30):
+def plot_fitness_cost_along_genome(regions, data, minor_af, synnonsyn, reference, ws=30):
     '''Plot the fitness costs along the genome
 
     We have the fitness costs per site, but we only plot a running average over
@@ -686,23 +619,39 @@ def plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn,
     plt.tight_layout()
     #add_panel_label(ax, 'B', x_offset=-0.1)
     for ext in ['png', 'svg', 'pdf']:
-        fig.savefig('../figures/figure_S5_st_' + reference.subtype +'.'+ext)
+        fig.savefig('../figures/figure_S6_st_' + reference.subtype +'.'+ext)
 
 
-def enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af):
+def enrichment_analysis(regions, data_to_scatter, synnonsyn, reference, minor_af):
     '''Enrichment of nonsynonymous mutations at globally variable but intrapatient conserved sites'''
     from scipy.stats import fisher_exact
-    E = np.zeros((2,2,2))
+    E = {}
     for region in regions:
-        E += entropy_scatter(region, combined_entropy, synnonsyn, reference,
-                             fname='../figures/'+region+'_entropy_scatter.png')
-        fraction_diverse(region, minor_af, synnonsyn,
-                         '../figures/'+region+'_minor_allele_frequency.pdf')
-    print('NonSyn enrichment among variable sites with low within diversity',fisher_exact(E[:,:,1]))
+        # returns count matrix [syn/nonsyn, low/high fitness, low/high entropy (><0.1)]
+        E[region] = scatter_vs_entropy(region, data_to_scatter, synnonsyn, reference,
+                                        xlabel='fitness cost', xlim=(1e-4, 1.2),
+                                        enrichment_thresholds = (0.0, 0.03, 10.0))
+
+    print('NonSyn enrichment among variable sites with high fitness costs')
+    with open('../data/fitness_pooled/enrichment_st_'+args.subtype+'.tsv', 'w') as ofile:
+        ofile.write('\t'.join(['region', 'nonsyn-low cost', 'nonsyn-large cost', 'syn-low cost', 'syn-large cost', 'OR', 'invOR', 'pval'])+'\n')
+        for region, ctable  in E.iteritems():
+            print(region)
+            print('non-syn:\n', ctable[0])
+            print('syn:\n', ctable[1])
+            print('nonsyn/syn among diverse:\n', ctable[:,:,1])
+            OR, pval = fisher_exact(ctable[:,:,1])
+            print('odds ratio:', OR)
+            ofile.write('\t'.join([region]+map(str, [ctable[0,0,1], ctable[0,1,1], ctable[1,0,1],
+                                                     ctable[1,1,1], OR, np.round(1.0/OR,2), pval]))+'\n')
+        ctable = np.sum(E.values(), axis=0)
+        ofile.write('\t'.join(['all']+map(str, [ctable[0,0,1], ctable[0,1,1], ctable[1,0,1],
+                                                ctable[1,1,1], OR, np.round(1.0/OR,2), pval]))+'\n')
+
+    return E
 
 
-
-def export_selection_coefficients(data, synnonsyn, subtype, reference):
+def export_fitness_cost(data, synnonsyn, subtype, reference):
     '''Calculate and export per-site fitness costs (no average)'''
     from scipy.stats import scoreatpercentile
 
@@ -738,7 +687,7 @@ def export_selection_coefficients(data, synnonsyn, subtype, reference):
         cons_seq = [reference.consensus[pos] for pos in reference.annotation[region]]
 
 
-        with open('../data/nuc_'+region+'_selection_coeffcients_'+ subtype +'.tsv','w') as selfile:
+        with open('../data/fitness_pooled/nuc_'+region+'_selection_coeffcients_'+ subtype +'.tsv','w') as selfile:
             selfile.write('### selection coefficients in '+region+'\n')
             selfile.write('\t'.join(['# position','consensus', reference.refname,
                                     'lower quartile','median','upper quartile','syn'])+'\n')
@@ -796,7 +745,7 @@ if __name__=="__main__":
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
 
     # Intermediate data are saved to file for faster access later on
-    fn = '../data/avg_nucleotide_allele_frequency_str_'+args.subtype+'.pickle.gz'
+    fn = '../data/fitness_pooled/avg_nucleotide_allele_frequency_st_'+args.subtype+'.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             #patient_codes = ['p2','p3', 'p5', 'p8', 'p9','p10', 'p11'] # subtype B only, no p4/p7
@@ -831,34 +780,41 @@ if __name__=="__main__":
     synnonsyn_unconstrained = av['synnonsyn_unconstrained']
 
     # Enrichment of nonsynonymous mutations at globally variable but intrapatient conserved sites
-    enrichment_analysis(regions, combined_entropy, synnonsyn, reference, minor_af)
+    fitness_cost = {region:data['mut_rate'][region]/(minor_af[region]+af_cutoff) for region in regions}
+    enrichment_analysis(regions, fitness_cost, synnonsyn, reference, minor_af)
 
     # Prepare data for Figure 2 (see figure_2.py for the plot)
-    selcoeff_vs_entropy(regions,  minor_af, synnonsyn, data['mut_rate'],
+    for avg in ['harmonic', 'geometric', 'arithmetic']:
+        fitnesscost_vs_entropy(regions,  minor_af, synnonsyn, data['mut_rate'],
                         reference,
-                        figname='../figures/'+region+'_sel_coeff_scatter_st_'+args.subtype+'.png',
-                        dataname='../data/combined_af_avg_selection_coeff_st_'+args.subtype+'.pkl',
-                        smoothing='harmonic')
+                        dataname='../data/fitness_pooled/pooled_'+avg+'_selection_coeff_st_'+args.subtype+'.pkl',
+                        smoothing=avg)
 
-    # Figure 3
-    for region in regions:
-        fitness_scatter(region, minor_af, data['mut_rate'], synnonsyn, reference, minor_af)
-        selcoeff_distribution(region, minor_af, synnonsyn, synnonsyn_unconstrained,
-                               data['mut_rate'],
-                              '../figures/'+region+'_sel_coeff_st_'+args.subtype, ref=reference)
-        selcoeff_confidence(region, data,
-                            '../figures/'+region+'_sel_coeff_confidence_st_'+args.subtype)
-
-    selcoeff_distribution(['gag', 'pol', 'vif', 'vpu', 'vpr', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
+    # Figure 4
+    fitnesscost_distribution(['gag', 'pol', 'vif','vpr', 'vpu', 'nef'], minor_af, synnonsyn, synnonsyn_unconstrained,
                           data['mut_rate'],
                           '../figures/figure_4ABC_st_'+args.subtype)
 
-    # Figure 4
-    plot_selection_coefficients_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
+    # Figure S4 -- confidence of fitness cost estimates
+    fig, axs = plt.subplots(4,2, figsize=(18,10))
+    for ax, region in zip(axs.flatten(), regions):
+        fitnesscost_confidence(region, data, ax=ax)
+    plt.tight_layout()
+    for fmt in ['png', 'pdf', 'svg']:
+        plt.savefig('../figures/figure_S5.'+fmt)
+
+
+    for ax, region in zip(axs.flatten(), regions):
+        fitness_scatter(region, minor_af, data['mut_rate'], synnonsyn, reference, minor_af)
+
+
+    # Figure 3
+    plot_fitness_cost_along_genome(regions, data, minor_af, synnonsyn_unconstrained, reference)
 
     # export selection coefficients to file as supplementary info
-    export_selection_coefficients(data, synnonsyn, args.subtype, reference)
+    export_fitness_cost(data, synnonsyn, args.subtype, reference)
 
+    # plot the correlation of
     SvsNpat(data, reference,
-          figname='../figures/nuc_entropy_corr_vs_patients_st_'+args.subtype,
+          figname='../figures/figure_S4_nuc_entropy_corr_vs_patients_st_'+args.subtype,
           label_str='A' if args.subtype=='any' else 'B')

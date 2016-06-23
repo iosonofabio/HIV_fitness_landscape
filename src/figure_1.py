@@ -82,7 +82,11 @@ def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
 
 
 def get_mutation_matrix(data):
-    '''Calculate the mutation rate matrix'''
+    '''
+    Calculate the mutation rate matrix from accumulatio of
+    intra patient diversity via linear regression. Uncertainty
+    of the estimates is assessed via boot strapping over patients.
+    '''
     def get_mu(data):
         d = (data
              .loc[:, ['af', 'time_binc', 'mut']]
@@ -121,6 +125,7 @@ def plot_mutation_increase(data, mu=None, axs=None):
     transversions_pair = ['A->T', 'C->G',  'G->C', 'T->A']
     transversions_np = ['A->C', 'C->A', 'G->T', 'T->G']
 
+    # bin data into time bins and extract derived allele frequency
     d = (data
          .loc[:, ['af', 'time_binc', 'mut']]
          .groupby(['mut', 'time_binc'])
@@ -142,10 +147,10 @@ def plot_mutation_increase(data, mu=None, axs=None):
         for t in sorted(sampleavg[mut].keys()):
             stderr[mut].append(np.std(sampleavg[mut][t])/np.sqrt(len(sampleavg[mut][t])-1))
 
-    if axs is None:
+    if axs is None: # create new axis and save plot
         savefig = True
         fig, axs = plt.subplots(1,2, figsize=(12,6))
-    else:
+    else:           # add to provided axis
         savefig = False
 
     mlist = ['A->G', 'C->T', 'G->A', 'T->C',
@@ -153,12 +158,12 @@ def plot_mutation_increase(data, mu=None, axs=None):
              'G->T', 'G->C', 'T->G', 'T->A']
     for mut in mlist:
         aft = d.loc[mut]
-        if mut in transitions:
+        if mut in transitions: # transitions in one plot
             ax=axs[0]
             color = cmap[transitions.index(mut)]
             marker='o'
             ls='-o'
-        else:
+        else:                   # transversion in the other plot
             ax=axs[1]
             if mut in transversions_pair:
                 ls='--o'
@@ -217,7 +222,7 @@ def plot_mutation_increase(data, mu=None, axs=None):
 
 
 def plot_mutation_rate_graph(mu, ax=None):
-    '''Plot accumulation of mutations and fits'''
+    '''Plot the figure that illustrates all mutations as arrows between nucleotides'''
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(18, 8))
     else:
@@ -319,6 +324,7 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10,suffix=''):
     ax1 = plt.subplot2grid((2,2), (0,0))
     ax2 = plt.subplot2grid((2,2), (0,1))
     ax3 = plt.subplot2grid((2,2), (1, 0), colspan=2)
+    # plot linear regression
     plot_mutation_increase(data, mu=mu, axs=[ax1, ax2])
 
     mu_all = pd.DataFrame({'mu': mu,
@@ -326,6 +332,7 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10,suffix=''):
                               'dmulog10': dmulog10,
                               'dmuAlog10': dmuAlog10,
                             })
+    # plot matrix of arrows
     plot_mutation_rate_graph(mu_all,
                              ax=ax3)
     plt.tight_layout()
@@ -457,13 +464,18 @@ if __name__ == '__main__':
     parser.add_argument('--regenerate', action='store_true',
                         help="regenerate data from allele counts")
     args = parser.parse_args()
+    # use only patients with early samples and likely single virion infection
+    patients = ['p1', 'p2','p5', 'p6', 'p8', 'p9', 'p11']
+    data_out_path = '../data/mutation_rates/'
+
+    # make many mutation rate estimates excluding gp120 or not and with different
+    # threshold for cross-sectional diversity
     for excluded_proteins in [[], ['gp120']]:
         for thres in [0.01, 0.03, 0.1, 0.3, 0.5]:
             suffix = '_'+'_'.join([str(thres)]+excluded_proteins)
 
             # Intermediate data are saved to file for faster access later on
-            fn = '../data/mutation_rate_data'+suffix+'.pickle'
-            patients = ['p1', 'p2','p5', 'p6', 'p8', 'p9', 'p11']
+            fn = data_out_path + 'mutation_rate_data'+suffix+'.pickle'
             if not os.path.isfile(fn) or args.regenerate:
                 data = collect_data(patients, entropy_threshold=thres, excluded_proteins=excluded_proteins)
                 try:
@@ -483,7 +495,7 @@ if __name__ == '__main__':
             # save positions used for mutation rate estimation.
             all_pos = np.array(np.unique(data['refpos']), dtype=int)
             print(thres, excluded_proteins, '# positions', len(all_pos))
-            np.savetxt('../data/mutation_rate_positions'+suffix+'.txt', all_pos, fmt='%d')
+            np.savetxt(data_out_path+ 'mutation_rate_positions'+suffix+'.txt', all_pos, fmt='%d')
 
             # Get mutation rate with bootstrap error bars
             mu,dmulog10 = get_mutation_matrix(data)
@@ -497,4 +509,5 @@ if __name__ == '__main__':
             export_mutation_rate_matrix(mu, dmulog10, muA, dmuAlog10, suffix=suffix)
 
             # Plot Figure 1
-            plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10, suffix=suffix)
+            if 'gp120' in excluded_proteins and thres==0.3:
+                plot_figure_1(data=data, mu=mu, dmulog10=dmulog10, muA=muA, dmuAlog10=dmuAlog10, suffix=suffix)

@@ -22,7 +22,7 @@ from hivevo.HIVreference import HIVreference
 h = 10**(-8)
 cols_Fabio = ['b','c','g','y','r','m']
 cols = ['b','g','r','c','m','y','k','b','g','r']
-outdir_name = '../data/'
+outdir_name = '../data/fitness_KL/'
 
 def fit_upper_multipat(xk_q_all, tk_all, LL=None):
     '''Fitting the quantile data with a linear law
