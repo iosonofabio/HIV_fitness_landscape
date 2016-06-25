@@ -3,6 +3,7 @@
 author:     Richard Neher
 date:       22/02/16
 content:    Combine allele frequencies from all patients for strongly conserved sites
+            and analyze properties of non-coding features of the HIV-1 genome
 '''
 # Modules
 from __future__ import division, print_function
@@ -74,11 +75,15 @@ features = {
 
 
 # Functions
-def plot_selection_coefficients_along_genome(start, stop, feature_names,
+def plot_fitness_costs_along_genome(start, stop, feature_names,
                             data, minor_af,reference,synnonsyn=None,
-                            ws=30, wsp=30, pheno=None, ax=None,
+                            ws=30, ws_syn=30, pheno=None, ax=None,
                             ybar=0.13, ytext=0.145):
-    '''Plot the fitness costs along the genome'''
+    '''
+    Plot the fitness costs along the genome in an interval specified by
+    start and stop. Adds genome annotation of elements to feature_names
+    optionally includes a running average
+    '''
     from util import add_panel_label
 
     if ax is None:
@@ -106,15 +111,8 @@ def plot_selection_coefficients_along_genome(start, stop, feature_names,
     if synnonsyn is not None:
         ind = (~np.isnan(minor_af[region]))&synnonsyn
         ax.plot(running_average(np.arange(minor_af[region].shape[0])[ind], ws),
-                np.exp(running_average(np.log(sc[ind]), ws)),
+                np.exp(running_average(np.log(sc[ind]), ws_syn)),
                 c=cols[2], ls='-', label='non-coding/synonymous')
-
-    # add running average of phenotype if desired
-    if pheno is not None:
-        ind = ~np.isnan(pheno)
-        ax.plot(running_average(np.arange(len(pheno))[ind], wsp),
-                    np.exp(running_average(np.log(pheno+0.0001), wsp)),
-                    c=cols[1], ls='-')
 
     # add features
     colors = sns.color_palette('husl', 7)
@@ -160,10 +158,10 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     # plot the 5' region
     start, stop = 500, 900
     feature_names = ['polyA', 'U5', 'U5 stem', 'PBS', 'PSI SL1-4']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+    ax = plot_fitness_costs_along_genome(start, stop, feature_names, data,
                                      minor_af, reference, pheno=None,
                                      synnonsyn=synnonsyn['genomewide'],
-                                     ws=8, wsp=1, ax=axs[0])
+                                     ws=8, ws_syn=4, ax=axs[0])
     # add label and dimension to left-most axis, all other are tied to this one
     ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
     ax.set_ylim(ymin, ymax)
@@ -182,9 +180,9 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     # frame shift region -- no syn fitness cost here since this is in an overlap
     start, stop = 2050, 2150
     feature_names = ['frameshift']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+    ax = plot_fitness_costs_along_genome(start, stop, feature_names, data,
                                              minor_af, reference, pheno=None,
-                                             ws=8, wsp=1, ax=axs[1])
+                                             ws=8, ws_syn=4, ax=axs[1])
 
     ax.plot([start, reference.annotation['gag'].location.end],
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
@@ -199,10 +197,10 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     # plot the cPPT region
     start, stop = 4750, 5000
     feature_names = ['A1','D2', 'cPPT']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+    ax = plot_fitness_costs_along_genome(start, stop, feature_names, data,
                                      minor_af, reference, pheno=None,
                                      synnonsyn=synnonsyn['genomewide'],
-                                     ws=8, wsp=1, ax=axs[2])
+                                     ws=8, ws_syn=4, ax=axs[2])
 
     # add label and dimension to left-most axis, all other are tied to this one
     ax.set_ylim(ymin, ymax)
@@ -221,10 +219,10 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
     # plot the 3' region
     start, stop = 9050, 9150
     feature_names = ['PPT']
-    ax = plot_selection_coefficients_along_genome(start, stop, feature_names, data,
+    ax = plot_fitness_costs_along_genome(start, stop, feature_names, data,
                                              minor_af, reference, pheno=None,
                                              synnonsyn=synnonsyn['genomewide'],
-                                             ws=8, wsp=1, ax=axs[3])
+                                             ws=8, ws_syn=4, ax=axs[3])
 
     ax.plot([start, reference.annotation['nef'].location.end],
             ax.get_ylim()[0]*np.ones(2), lw=10, c='k', alpha=0.7)
@@ -246,7 +244,12 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
             plt.savefig(fname+ext)
 
 
-def add_pairing_to_reference(reference):
+def add_RNA_properties_to_reference(reference):
+    '''
+    annotate the reference genome with pairing probabilities from
+    siegfried et al and RNA secondary structure predictions by
+    Sukosd et al
+    '''
     from hivevo.external import load_pairing_probability_NL43
     from hivevo.HIVreference import ReferenceTranslator
     from parse_pairing_probabilities import load_shape
@@ -275,7 +278,7 @@ def add_pairing_to_reference(reference):
     reference.shape_values = np.ma.array(shape_array, mask=shape_array<-100)
 
     # load data from Suskod et al NAR.
-    suskod = pd.read_csv('../data/nar-01265-r-2015-File010_pairing.csv')
+    suskod = pd.read_csv('../data/Sukosd_etal_NAR_2015.csv')
     fields = suskod.columns[2:]
     suskod_data = {}
     offset = 454
@@ -358,6 +361,10 @@ def shape_vs_fitness(data, minor_af, shape_data,synnonsyn, ws=100, fname=None, n
 
 
 def check_neutrality(minor_af, mut_rates, position_file):
+    '''
+        analyze the fitness distribution of sites used to calculate the neutral
+        mutation rate
+    '''
     region='genomewide'
     # make distribution of selection coefficients used to estimate the neutral mutation rate
     ind = (~np.isnan(minor_af['genomewide']))
@@ -381,15 +388,16 @@ def check_neutrality(minor_af, mut_rates, position_file):
     plt.ylabel('fraction of sites', fontsize=fs)
     plt.tick_params(labelsize=fs*0.8)
     plt.tight_layout()
-    plt.savefig('../figures/neutral_set_comparison.pdf')
+    for fmt in ['pdf', 'svg', 'png']:
+        plt.savefig('../figures/figure_S2B_mutation_pos_fitness_st_'+args.subtype+'.'+fmt)
     return s
+
 
 def RNA_correlation_in_genes(data, minor_af, reference, pairings, synnonsyn, fname = 'test.tsv'):
     region='genomewide'
     sc = (data['mut_rate'][region]/(af_cutoff+minor_af[region]))
     sc[sc>0.1] = 0.1
     sc[sc<0.001] = 0.001
-
 
     with open(fname, 'w') as ofile:
         for region in ['gag', 'pol','nef',  'env', 'vif']:
@@ -419,14 +427,12 @@ if __name__=="__main__":
     reference = HIVreference(refname='HXB2', subtype=args.subtype)
     genes = ['gag', 'nef', 'env', 'vif','pol', 'vpr', 'vpu']
     # Intermediate data are saved to file for faster access later on
-    fn = '../data/avg_noncoding_allele_frequency_st_'+args.subtype+'.pickle.gz'
+    fn = '../data/fitness_pooled_noncoding/avg_noncoding_allele_frequency_st_'+args.subtype+'.pickle.gz'
     if not os.path.isfile(fn) or args.regenerate:
         if args.subtype=='B':
             patient_codes = ['p2','p3', 'p5','p7', 'p8', 'p9','p10', 'p11'] # subtype B only
         else:
-            #FIXME: Fabio does not have consistent files for p7
-            # patient_codes = ['p1', 'p2','p3','p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes
-            patient_codes = ['p1', 'p2','p3','p5','p6', 'p8', 'p9','p10', 'p11'] # all subtypes
+            patient_codes = ['p1', 'p2','p3','p5','p6','p7', 'p8', 'p9','p10', 'p11'] # all subtypes
 
         # gag and nef are loaded since they overlap with relevnat non-coding structures
         # and we need to know which positions have synonymous mutations
@@ -474,8 +480,7 @@ if __name__=="__main__":
                            fname='../figures/figure_4B_st_'+args.subtype)
 
     # Check SHAPE vs fitness
-    #FIXME: ../data/nar-01265-r-2015-File010_pairing.csv is not in the repo
-    add_pairing_to_reference(reference)
+    add_RNA_properties_to_reference(reference)
     ws=100
     subset_of_positions = synnonsyn_unconstrained['genomewide']
     #subset_of_positions = np.ones_like(synnonsyn_unconstrained['genomewide'], dtype=bool)
@@ -497,7 +502,7 @@ if __name__=="__main__":
                      new_fig=False, label=k.replace(', ','+')+'; from Sukosd et al.')
 
     # check the neutrality of the positions used to determine the neutral mutation rate.
-    s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rate_positions_0.3_gp120.txt')
+    s = check_neutrality(minor_af, data['mut_rate'], '../data/mutation_rates/mutation_rate_positions_0.3_gp120.txt')
 
     pairings = [reference.pp, reference.suskod['PPfold, SHAPE']]
     RNA_correlation_in_genes(data, minor_af, reference, pairings, subset_of_positions,

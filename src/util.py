@@ -17,7 +17,7 @@ fig_fontsize = 12
 # Functions
 def load_mutation_rates(threshold=0.3, gp120=True):
     import pandas as pd
-    fn = '../data/mutation_rate_'+str(threshold) + ('_gp120' if gp120 else '') + '.pickle'
+    fn = '../data/mutation_rates/mutation_rate_'+str(threshold) + ('_gp120' if gp120 else '') + '.pickle'
     print('loading', fn)
     mu =  pd.read_pickle(fn)
     return mu

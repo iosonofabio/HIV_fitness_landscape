@@ -177,7 +177,7 @@ def collect_weighted_aa_afs(region, patients, reference, cov_min=1000, max_div=0
 
 
 def collect_data(patient_codes, regions, subtype):
-    cov_min=1000
+    cov_min=500
     combined_af_by_pat={}
     initial_codons_by_pat={}
     combined_phenos={}
@@ -200,9 +200,12 @@ def collect_data(patient_codes, regions, subtype):
 
 
 def get_optimal_epitopes(region, reference):
+    '''
+    reads table of LANL A-list epitopes and returns an array along the HXB2 genome
+    with the number of epitopes covering that region
+    '''
     epi_map = np.zeros_like(reference.entropy, dtype=int)
     lanl_optimal = pd.read_csv("../data/optimal_ctl_summary.csv")
-    #lanl_optimal = pd.read_csv("../data/ctl_variant.csv")
     for ii, epi in lanl_optimal.iterrows():
         try:
             if ((epi.Protein.lower() == region) or (epi.Protein=='gp160' and region=='env')):
@@ -216,6 +219,11 @@ def get_optimal_epitopes(region, reference):
 
 
 def get_associations(regions, aa_ref='NL4-3'):
+    '''
+    reads table of subtype B HLA association from Carlson et al 2012
+    and returns a dictionary of regions with arrays listing HLA associated
+    positions and protective positions (from Bartha et al, eLife 2013)
+    '''
     hla_assoc = pd.read_csv("../data/Carlson_el_al_2012_HLAassoc.csv")
     #hla_assoc = pd.read_csv("data/Brumme_et_al_HLAassoc.csv")
     qvalue_cutoff = 0.1
@@ -247,6 +255,10 @@ def get_associations(regions, aa_ref='NL4-3'):
 
 
 def fitness_costs_in_optimal_epis(regions, s):
+    '''
+    makes cumulative plot of the distribution of fitness costs in optimal epitopes
+    vs those positions outside these eptiopes
+    '''
     cols = sns.color_palette()
     plt.figure(figsize=(8,6))
     ax=plt.subplot(111)
@@ -262,11 +274,7 @@ def fitness_costs_in_optimal_epis(regions, s):
         stmp[stmp>0.1]=0.1
         vals = stmp[ind&(epi>0)]
         plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label=region+ ', A-list epitopes', c=cols[ri], lw=2)
-#        plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals),
-#                 label='within A-list epitopes', alpha=0.5)
         vals = stmp[ind&(epi==0)]
-#        plt.hist(vals, bins=np.logspace(-3,-1,21), weights = np.ones(len(vals), dtype=float)/len(vals),
-#                 label='other', alpha=0.5)
         plt.plot(sorted(vals), np.linspace(0,1,len(vals)), label=region+ ', outside epitopes', ls='--', c=cols[ri], lw=2)
 
     plt.ylabel('fraction cost<X', fontsize=fs)
@@ -277,7 +285,7 @@ def fitness_costs_in_optimal_epis(regions, s):
     ax.tick_params(labelsize=0.8*fs)
     plt.legend(fontsize=0.8*fs, loc=2)
     plt.tight_layout()
-    #add_panel_label(ax,'E', x_offset=-.2)
+
     for ext in ['png', 'svg', 'pdf']:
         plt.savefig('../figures/optimal_epitopes_st_'+args.subtype+'.'+ext)
 
@@ -285,13 +293,16 @@ def fitness_costs_in_optimal_epis(regions, s):
 
 def fitness_scatter(region, s, associations,
                     reference, annotate_protective=True, fname = None, running_avg=True):
-
-    enrichment, rho, pval = entropy_scatter(region, s, associations, reference, fname=fname,
+    '''
+    scatter intrapatient fitness estimates of amino acid mutations vs cross-sectional entropy
+    '''
+    enrichment, rho, pval = scatter_vs_entropy(region, s, associations, reference, fname=fname,
                             annotate_protective=annotate_protective,
                             running_avg=True, xlabel='fitness cost', xlim = 1e-4)
     return  enrichment, rho, pval
 
-def entropy_scatter(region, within_entropy, associations, reference,
+
+def scatter_vs_entropy(region, data_to_scatter, associations, reference,
                 fname = None, annotate_protective=False, running_avg=True,
                 xlabel='pooled within patient entropy', xlim=1e-5):
     '''
@@ -299,10 +310,10 @@ def entropy_scatter(region, within_entropy, associations, reference,
     intrapatient frequencies amino acid frequencies
     '''
     xsS = reference.entropy
-    ind = (xsS>=0.000)&(~np.isnan(within_entropy[region]))
+    ind = (xsS>=0.000)&(~np.isnan(data_to_scatter[region]))
     print(region)
-    print("Pearson:", pearsonr(within_entropy[region][ind], xsS[ind]))
-    rho, pval = spearmanr(within_entropy[region][ind], xsS[ind])
+    print("Pearson:", pearsonr(data_to_scatter[region][ind], xsS[ind]))
+    rho, pval = spearmanr(data_to_scatter[region][ind], xsS[ind])
     print("Spearman:", rho, pval)
 
     plt.figure(figsize = (7,6))
@@ -317,10 +328,10 @@ def entropy_scatter(region, within_entropy, associations, reference,
     enrichment = np.zeros((2,nthres_in, nthres_xs), dtype=int)
     for ni, assoc_ind, label_str in ((0, ~assoc_ind, 'other'), (2, assoc_ind, 'HLA/protective')):
         tmp_ind = assoc_ind&ind
-        plt.scatter(within_entropy[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
-        #plt.plot(sorted(within_entropy[region][tmp_ind]+.00003), np.linspace(0,1,tmp_ind.sum()), c=cols[ni], label=label_str)
+        plt.scatter(data_to_scatter[region][tmp_ind]+.00003, xsS[tmp_ind]+.005, c=cols[ni], label=label_str, s=30)
+        #plt.plot(sorted(data_to_scatter[region][tmp_ind]+.00003), np.linspace(0,1,tmp_ind.sum()), c=cols[ni], label=label_str)
         if running_avg: # add a running average to the scatter plot averaging over npoints on both axis
-            A = np.array(sorted(zip(within_entropy[region][tmp_ind]+0.0000, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
+            A = np.array(sorted(zip(data_to_scatter[region][tmp_ind]+0.0000, xsS[tmp_ind]+0.005), key=lambda x:x[0]))
             plt.plot(np.exp(np.convolve(np.log(A[:,0]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         np.exp(np.convolve(np.log(A[:,1]), np.ones(npoints, dtype=float)/npoints, mode='valid')),
                         c=cols[ni], lw=3)
@@ -332,7 +343,7 @@ def entropy_scatter(region, within_entropy, associations, reference,
     print(enrichment, fisher_exact(enrichment[:,:,1]))
     # add labels to points of positions of interest (positions with protective variation)
     if annotate_protective:
-        A = np.array((within_entropy[region]+0.00003, xsS+0.005)).T
+        A = np.array((data_to_scatter[region]+0.00003, xsS+0.005)).T
         for feat, positions in protective_positions[region].iteritems():
             for pos in positions:
                 intra, cross = A[pos+offsets[feat],:]
@@ -354,21 +365,21 @@ def entropy_scatter(region, within_entropy, associations, reference,
     return enrichment, rho, pval
 
 
-def phenotype_scatter(region, within_entropy, phenotype, phenotype_name, fname = None):
+def phenotype_scatter(region, data_to_scatter, phenotype, phenotype_name, fname = None):
     '''
-    scatter minor within patient variation against phenotypes associated to positions in proteins
+    scatter data provided against phenotypes associated to positions in proteins
     such as disorder scores, solvent accessible area or ddG calcuations. the values come from
     Li et al Retrovirology 2015 and Carlson, personal communication
     '''
-    ind = (phenotype!=0)&(~np.isnan(within_entropy[region]))
+    ind = (phenotype!=0)&(~np.isnan(data_to_scatter[region]))
     print(region, phenotype_name)
-    print("Pearson:", pearsonr(within_entropy[region][ind], phenotype[ind]))
-    rho, pval = spearmanr(within_entropy[region][ind], phenotype[ind])
+    print("Pearson:", pearsonr(data_to_scatter[region][ind], phenotype[ind]))
+    rho, pval = spearmanr(data_to_scatter[region][ind], phenotype[ind])
     print("Spearman:", rho, pval)
 
     plt.figure(figsize = (7,6))
     plt.title("Spearman's rho: "+str(np.round(rho,2)))
-    plt.scatter(within_entropy[region][ind]+.00003, phenotype[ind], s=30)
+    plt.scatter(data_to_scatter[region][ind]+.00003, phenotype[ind], s=30)
 
     plt.xlabel('pooled within patient entropy', fontsize=fs)
     plt.ylabel(phenotype_name, fontsize=fs)
@@ -438,7 +449,7 @@ def PhenoCorr_vs_Npat(pheno, data, figname=None, label_str=''):
             plt.savefig(figname+'.'+ext)
 
 
-def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_aa, nbootstraps=0):
+def fitness_cost_mutation(region, data, aa_mutation_rates, pos, target_aa, nbootstraps=0):
     '''
     determine the fitness cost associated with a particular amino acid mutations such as K103N
     this requires specification of the target amino acid and a specific calculation of
@@ -477,7 +488,10 @@ def selection_coefficient_mutation(region, data, aa_mutation_rates, pos, target_
     return s_out
 
 
-def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nbootstraps=None):
+def fitness_costs_per_site(region,data, total_nonsyn_mutation_rates, nbootstraps=None):
+    '''
+    function that returns amino acid fitness costs in a specific region
+    '''
     codons = data['init_codon'][region]
     minor_af_by_pat = {pat: (x[:20,:].sum(axis=0) - x[:20,:].max(axis=0))/x[:20,:].sum(axis=0)
                         for pat, x in data['af_by_pat'][region].iteritems()}
@@ -502,7 +516,6 @@ def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nb
 
         tmp_nu_over_mu = np.ma.array(nu_over_mu)
         tmp_nu_over_mu.mask = np.isnan(nu_over_mu)
-        #import ipdb; ipdb.set_trace()
         tmp_s = 1.0/(tmp_nu_over_mu.mean(axis=0)+0.1)
         tmp_s[tmp_s.mask] = np.nan
         s_bs.append(tmp_s)
@@ -512,8 +525,8 @@ def selection_coefficients_per_site(region,data, total_nonsyn_mutation_rates, nb
         return np.array(s_bs)
 
 
-def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates):
-    selcoeff = selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+def fitness_costs_distribution(region, data, total_nonsyn_mutation_rates):
+    selcoeff = fitness_costs_per_site(region, data, total_nonsyn_mutation_rates)
     selcoeff[selcoeff<0.001]=0.001
     selcoeff[selcoeff>0.1]=0.1
     ind = ~np.isnan(selcoeff)
@@ -526,14 +539,14 @@ def selection_coefficients_distribution(region, data, total_nonsyn_mutation_rate
         print("NO SELECTION COEFFICENTS FOR", region)
 
 
-def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
+def fitness_costs_compare(regions, data, total_nonsyn_mutation_rates):
     '''
-    compare the distribution of selection coefficients among different regions in the genome
+    compare the distribution of fitness costs among different regions in the genome
     '''
     plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
-        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc =  fitness_costs_per_site(region, data, total_nonsyn_mutation_rates)
         sc[sc<0.001]=0.001
         sc[sc>0.1]=0.1
         selcoeff[region] = np.ma.array(sc, mask=np.isnan(sc))
@@ -554,15 +567,15 @@ def selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates):
     return selcoeff
 
 
-def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_nonsyn_mutation_rates, plot=False, cumulative=True):
+def fitness_costs_compare_pheno(pheno, threshold, regions, data, total_nonsyn_mutation_rates, plot=False, cumulative=True):
     '''
-    compare the distribution of selection coefficients between sites with a phenotype above of below
+    compare the distribution of fitness costs between sites with a phenotype above of below
     the threshold. optionally plots the distribution
     '''
     if plot: plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
-        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc =  fitness_costs_per_site(region, data, total_nonsyn_mutation_rates)
         sc[sc<0.001]=0.001
         sc[sc>0.1]=0.1
         valid = data['pheno'][region][pheno]>0
@@ -600,15 +613,15 @@ def selection_coefficients_compare_pheno(pheno, threshold, regions, data, total_
     return KS
 
 
-def selection_coefficients_compare_association(association, associations, regions, data, total_nonsyn_mutation_rates):
+def fitness_costs_compare_association(association, associations, regions, data, total_nonsyn_mutation_rates):
     '''
-    essentially the same as selection_coefficients_compare_pheno but for binary associations rather than
+    essentially the same as fitness_costs_compare_pheno but for binary associations rather than
     continuous phenotypes.
     '''
     plt.figure()
     selcoeff = {}
     for ri,region in enumerate(regions):
-        sc =  selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates)
+        sc =  fitness_costs_per_site(region, data, total_nonsyn_mutation_rates)
         sc[sc<0.001]=0.001
         sc[sc>0.1]=0.1
         above = associations[region][association]
@@ -634,14 +647,14 @@ def selection_coefficients_compare_association(association, associations, region
 
 
 def compare_experiments(data, aa_mutation_rates):
-    fc = pd.read_csv('../data/fitness_costs.csv')
+    fc = pd.read_csv('../data/fitness_costs_experiments.csv')
     coefficients = {}
     for ii, mut in fc.iterrows():
         region = mut['region']
         offset = offsets[mut['feature']]
         aa, pos = mut['mutation'][-1], int(mut['mutation'][1:-1])+offset
         coefficients[(mut['feature'], mut['mutation'])] = (mut['normalized'],
-            selection_coefficient_mutation(region, data, aa_mutation_rates, pos, aa, nbootstraps=100))
+            fitness_cost_mutation(region, data, aa_mutation_rates, pos, aa, nbootstraps=100))
 
     return coefficients
 
@@ -651,7 +664,7 @@ def compare_hinkley(data, reference, total_nonsyn_mutation_rates, fname=None):
     cutoff=0.1
     hinkley_cost = {}
     hfit = parse_hinkley()
-    selcoeff = selection_coefficients_per_site('pol', data, total_nonsyn_mutation_rates)
+    selcoeff = fitness_costs_per_site('pol', data, total_nonsyn_mutation_rates)
     ref_aa = np.array(reference.seq.seq.translate())
     past_cutoff = selcoeff>cutoff
     selcoeff[past_cutoff]=cutoff
@@ -686,9 +699,9 @@ def compare_hinkley(data, reference, total_nonsyn_mutation_rates, fname=None):
     return hinkley_cost
 
 
-def export_selection_coefficients(data, total_nonsyn_mutation_rates, subtype):
+def export_fitness_costs(data, total_nonsyn_mutation_rates, subtype):
     '''
-    write selection coefficients as tab separated files
+    write fitness costs as tab separated files
     files contain position and 25%, 50% and 75% of 100 bootstrap replicates
     '''
     from scipy.stats import scoreatpercentile
@@ -703,14 +716,14 @@ def export_selection_coefficients(data, total_nonsyn_mutation_rates, subtype):
     for region in data['af_by_pat']:
         reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
         ref_seq = reference.seq.seq.translate()
-        sel_array = selection_coefficients_per_site(region, data,
+        sel_array = fitness_costs_per_site(region, data,
                             total_nonsyn_mutation_rates, nbootstraps=100)
         selcoeff={}
         for q in [25, 50, 75]:
             selcoeff[q] = scoreatpercentile(sel_array, q, axis=0)
 
-        with open('../data/'+region+'_selection_coefficients_st_'+subtype+'.tsv','w') as selfile:
-            selfile.write('### selection coefficients in '+region+'\n')
+        with open('../data/fitness_pooled_aa/aa_'+region+'_fitness_costs_st_'+subtype+'.tsv','w') as selfile:
+            selfile.write('### fitness costs in '+region+'\n')
             selfile.write('\t'.join(['# position','consensus', reference.refname,
                                     'lower quartile','median','upper quartile'])+'\n')
 
@@ -731,7 +744,7 @@ if __name__=="__main__":
                         help='subtype to compare against')
     args = parser.parse_args()
 
-    fn = '../data/avg_aa_allele_frequency_st_'+args.subtype+'.pickle.gz'
+    fn = '../data/fitness_pooled_aa/avg_aa_allele_frequency_st_'+args.subtype+'.pickle.gz'
 
     regions = ['gag', 'pol', 'nef', 'env', 'vif']
     if not os.path.isfile(fn) or args.regenerate:
@@ -755,7 +768,7 @@ if __name__=="__main__":
 
     associations = get_associations(regions)
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
-    selcoeff = {region: selection_coefficients_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=None) for region in regions}
+    selcoeff = {region: fitness_costs_per_site(region, data, total_nonsyn_mutation_rates, nbootstraps=None) for region in regions}
 
     aa_ref = 'NL4-3'
     global_ref = HIVreference(refname=aa_ref, subtype=args.subtype)
@@ -769,12 +782,12 @@ if __name__=="__main__":
         tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference,
                                             fname='../figures/'+region+'_aa_fitness_scatter_st_'
                                                     +args.subtype+'.pdf')
-        selection_coefficients_distribution(region, data, total_nonsyn_mutation_rates)
+        fitness_costs_distribution(region, data, total_nonsyn_mutation_rates)
 
         if region == 'pol':
             compare_hinkley(data,reference, total_nonsyn_mutation_rates,
                             fname='../figures/hinkley_comparison_'+args.subtype+'.pdf')
-#        tmp, rho, pval = entropy_scatter(region, combined_entropy, associations, reference,
+#        tmp, rho, pval = scatter_vs_entropy(region, combined_entropy, associations, reference,
 #                                         '../'+region+'_aa_entropy_scatter_st_'
 #                                        +args.subtype+'.pdf', annotate_protective=True)
 
@@ -791,38 +804,37 @@ if __name__=="__main__":
                 print("Phenotype scatter failed for:",region, phenotype)
                 phenotype_correlations[(region, phenotype)] = ('NaN', 'NaN')
 
-    with open("../data/phenotype_correlation_st_"+args.subtype+".tsv", 'w') as pheno_file:
+    with open("../data/fitness_pooled_aa/phenotype_correlation_st_"+args.subtype+".tsv", 'w') as pheno_file:
         pt = ['entropy', 'disorder', 'accessibility']
         pheno_file.write('\t'.join(['gene']+pt)+'\n')
         for region in regions:
             pheno_file.write('\t'.join([region]+
                 [str(np.round(phenotype_correlations[(region, pheno)][0],3)) for pheno in pt])+'\n')
 
-    export_selection_coefficients(data, total_nonsyn_mutation_rates, args.subtype)
-
-    sc = selection_coefficients_compare(regions, data, total_nonsyn_mutation_rates)
+    export_fitness_costs(data, total_nonsyn_mutation_rates, args.subtype)
+    #sc = fitness_costs_compare(regions, data, total_nonsyn_mutation_rates)
 
 
     pval = []
     pheno='structural'
     for thres in np.linspace(0,3,21):
-        KS = selection_coefficients_compare_pheno(pheno, thres, regions,
+        KS = fitness_costs_compare_pheno(pheno, thres, regions,
                                 data, total_nonsyn_mutation_rates, plot=False)
         pval.append((thres, np.log(KS['pol'].pvalue)))
 
     pval = np.array(pval)
     plt.plot(pval[:,0], pval[:,1])
 
-    KS_disorder = selection_coefficients_compare_pheno('disorder', 0.5, regions,
+    KS_disorder = fitness_costs_compare_pheno('disorder', 0.5, regions,
                                 data, total_nonsyn_mutation_rates, plot =True)
 
-    KS_accessibility = selection_coefficients_compare_pheno('accessibility', 75, regions,
+    KS_accessibility = fitness_costs_compare_pheno('accessibility', 75, regions,
                                 data, total_nonsyn_mutation_rates, plot=True)
 
-    KS_structural = selection_coefficients_compare_pheno('structural', 2.0, regions,
+    KS_structural = fitness_costs_compare_pheno('structural', 2.0, regions,
                                 data, total_nonsyn_mutation_rates, plot =True)
 
-    KS_HLA = selection_coefficients_compare_association('HLA', associations, regions,
+    KS_HLA = fitness_costs_compare_association('HLA', associations, regions,
                                 data, total_nonsyn_mutation_rates)
 
 

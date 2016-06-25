@@ -353,7 +353,7 @@ def plot_figure_1(data, mu, dmulog10, muA, dmuAlog10,suffix=''):
 
 def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None, suffix=''):
     '''Export the table of mutation rate coefficients to file'''
-    fn = '../data/mutation_rate'+suffix+'.pickle'
+    fn = '../data/mutation_rates/mutation_rate'+suffix+'.pickle'
     out = {'mu': mu, 'dmulog10': dmulog10}
     if muA is not None:
         out['muA'] = muA
@@ -363,7 +363,7 @@ def export_mutation_rate_matrix(mu, dmulog10, muA=None, dmuAlog10=None, suffix='
     mu_out = pd.DataFrame(out)
     mu_out.to_pickle(fn)
 
-    fn_tsv = '../data/mutation_rate'+suffix+'.tsv'
+    fn_tsv = '../data/mutation_rates/mutation_rate'+suffix+'.tsv'
     mu_out['log10mu'] = np.log10(out['mu'])
     mu_out['dlog10mu'] = out['dmulog10']
     header = ['log10(mu [per day per site])', 'stddev(log10(mu [per day per site]))']

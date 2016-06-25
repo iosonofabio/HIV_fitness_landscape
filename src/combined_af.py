@@ -703,7 +703,7 @@ def collect_data(patient_codes, regions, reference, synnonsyn=True):
     loop over regions and produce a dictionary that contains the frequencies,
     syn/nonsyn designations and mutation rates
     '''
-    cov_min=1000
+    cov_min=500
     combined_af_by_pat={}
     syn_nonsyn_by_pat={}
     syn_nonsyn_by_pat_unconstrained={}
@@ -796,13 +796,13 @@ if __name__=="__main__":
                           '../figures/figure_4ABC_st_'+args.subtype)
 
     # Figure S4 -- confidence of fitness cost estimates
-    fig, axs = plt.subplots(4,2, figsize=(18,10))
+    fig, axs = plt.subplots(4,2, figsize=(12,16))
     for ax, region in zip(axs.flatten(), regions):
         fitnesscost_confidence(region, data, ax=ax)
+    axs[-1,-1].set_axis_off()
     plt.tight_layout()
     for fmt in ['png', 'pdf', 'svg']:
         plt.savefig('../figures/figure_S5.'+fmt)
-
 
     for ax, region in zip(axs.flatten(), regions):
         fitness_scatter(region, minor_af, data['mut_rate'], synnonsyn, reference, minor_af)

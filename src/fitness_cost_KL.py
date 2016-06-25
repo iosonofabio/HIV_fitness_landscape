@@ -199,9 +199,7 @@ if __name__=="__main__":
 
 
     patient_names = ['p1','p2','p5','p6','p8','p9','p11']
-    # 'p4', 'p7' do not exist
-    # 'p10' - weird messages from Patient class
-    # p3, p8 - True mask for some time points
+    # p3, p10 - excluded since probably infected by >1 virion
 
     # Input arguments
     tt_all = []; xk_q_all = []; Ckq_q_all = []
@@ -231,7 +229,8 @@ if __name__=="__main__":
     header = ['s' + str(jq+1) for jq in range(q)]
     header.extend(['mu','D'])
     if outdir_name is not None:
-        np.savetxt(outdir_name + gen_region+'_smuD_KLmu_multi.txt',np.array([smuD_KL_q_multipat_mu]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + gen_region+'_smuD_KLmu_multi.txt',
+                   np.array([smuD_KL_q_multipat_mu]),header = '\t\t\t'.join(header))
 
         qbord = list(Squant[0]['range']) + [Squant[i]['range'][1] for i in xrange(1, len(Squant))]
         np.savetxt(outdir_name+gen_region+'_smuD_KL_quantiles.txt', qbord)
@@ -250,4 +249,6 @@ if __name__=="__main__":
     smuD_multipat_boot_mu_mean = smuD_multipat_boot_mu.mean(axis=0)
     smuD_multipat_boot_mu_sigma = np.sqrt((smuD_multipat_boot_mu**2).mean(axis=0) - smuD_multipat_boot_mu.mean(axis=0)**2)
     if outdir_name is not None:
-        np.savetxt(outdir_name + gen_region+'_smuD_KLmu_multi_boot.txt',np.array([smuD_multipat_boot_mu_mean, smuD_multipat_boot_mu_sigma]),header = '\t\t\t'.join(header))
+        np.savetxt(outdir_name + gen_region+'_smuD_KLmu_multi_boot.txt',
+                   np.array([smuD_multipat_boot_mu_mean, smuD_multipat_boot_mu_sigma]),
+                   header = '\t\t\t'.join(header))
