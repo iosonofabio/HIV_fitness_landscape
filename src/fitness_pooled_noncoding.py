@@ -27,8 +27,8 @@ from hivevo.patients import Patient
 from hivevo.HIVreference import HIVreference
 from hivevo.af_tools import divergence
 
-from combined_af import process_average_allele_frequencies, draw_genome
-from combined_af import af_average, load_mutation_rates, collect_data, running_average
+from fitness_pooled import process_average_allele_frequencies, draw_genome
+from fitness_pooled import af_average, load_mutation_rates, collect_data, running_average
 
 
 

@@ -27,8 +27,8 @@ from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 from util import add_panel_label
-from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
-from combined_af_aa import calc_amino_acid_mutation_rates
+from fitness_pooled import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
+from fitness_pooled_aa import calc_amino_acid_mutation_rates
 
 
 
@@ -239,7 +239,7 @@ if __name__=="__main__":
                         help='subtype to compare against')
     args = parser.parse_args()
 
-    fn = '../data/avg_aa_allele_frequency_st_'+args.subtype+'.pickle.gz'
+    fn = '../data/fitness_pooled_aa/avg_aa_allele_frequency_st_'+args.subtype+'.pickle.gz'
 
     if not os.path.isfile(fn):
         raise IOError('Data file not found. Please run combined_af_aa.py first')
@@ -248,4 +248,4 @@ if __name__=="__main__":
             data = cPickle.load(ifile)
 
     aa_mutation_rates, total_nonsyn_mutation_rates = calc_amino_acid_mutation_rates()
-    plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_5_subtype_'+args.subtype+'_withcost')
+    plot_drug_resistance_mutations(data, aa_mutation_rates, '../figures/figure_6_subtype_'+args.subtype+'_withcost')

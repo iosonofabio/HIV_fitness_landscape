@@ -26,7 +26,7 @@ from hivevo.sequence import alphaal
 from hivevo.HIVreference import HIVreferenceAminoacid, HIVreference
 from hivevo.af_tools import divergence
 from util import add_panel_label
-from combined_af import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
+from fitness_pooled import process_average_allele_frequencies, draw_genome, af_average, get_final_state, load_mutation_rates
 
 
 
@@ -687,19 +687,6 @@ def fitness_costs_compare_association(association, associations, regions, data, 
     return KS
 
 
-def compare_experiments(data, aa_mutation_rates):
-    fc = pd.read_csv('../data/fitness_costs_experiments.csv')
-    coefficients = {}
-    for ii, mut in fc.iterrows():
-        region = mut['region']
-        offset = offsets[mut['feature']]
-        aa, pos = mut['mutation'][-1], int(mut['mutation'][1:-1])+offset
-        coefficients[(mut['feature'], mut['mutation'])] = (mut['normalized'],
-            fitness_cost_mutation(region, data, aa_mutation_rates, pos, aa, nbootstraps=100))
-
-    return coefficients
-
-
 def compare_hinkley(data, reference, total_nonsyn_mutation_rates, fname=None):
     from parse_hinkley import parse_hinkley
     cutoff=0.1
@@ -908,3 +895,4 @@ if __name__=="__main__":
     PhenoCorr_vs_Npat('entropy', data, total_nonsyn_mutation_rates, associations,
                       figname='../figures/figure_S4_aa_fit_vs_entropy_st_'+args.subtype)
 
+    compare_experiments(data, aa_mutation_rates)
