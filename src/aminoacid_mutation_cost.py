@@ -61,11 +61,12 @@ if __name__=="__main__":
                        c=[blossum80[aa] for aa in alpha_aa], cmap=cm.RdBu_r, s=50)
             for aa in alpha_aa:
                 ax.annotate(aa, (fraction_lethal[gene1][aa][0]+0.02, fraction_lethal[gene2][aa][0]))
-            ax.set_xlabel('fraction s>0.05 ' + gene1, fontsize=fs)
-            ax.set_ylabel('fraction s>0.05 ' + gene2, fontsize=fs)
+            ax.set_xlabel(gene1+': fraction s>0.05', fontsize=fs)
+            ax.set_ylabel(gene2+': fraction s>0.05', fontsize=fs)
             ax.tick_params(labelsize=0.8*fs)
             ai+=1
             ax.set_xlim(0,1.1)
             ax.set_ylim(0,1.1)
     plt.tight_layout()
-    plt.savefig('../figures/fraction_lethal.pdf')
+    for fmt in ['pdf', 'png', 'svg']:
+        plt.savefig('../figures/figure_S7_st_'+subtype+'.'+fmt)

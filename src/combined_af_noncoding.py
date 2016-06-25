@@ -477,7 +477,7 @@ if __name__=="__main__":
         synnonsyn['genomewide'][pos] = synnonsyn[gene]
 
     plot_non_coding_figure(data, minor_af, synnonsyn_unconstrained, reference,
-                           fname='../figures/figure_4B_st_'+args.subtype)
+                           fname='../figures/figure_3B_st_'+args.subtype)
 
     # Check SHAPE vs fitness
     add_RNA_properties_to_reference(reference)

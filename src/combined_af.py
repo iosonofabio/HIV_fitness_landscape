@@ -315,7 +315,7 @@ def fraction_diverse(region, minor_af, synnonsyn, fname=None):
         plt.savefig(fname)
 
 
-def entropy_correlation_vs_npat(region, data, reference):
+def fitness_correlation_vs_npat(region, data, reference):
     '''
     evaluate entropy within/cross-sectional correlation for subsets of patients
     of different size. returns a dictionary with rank correlation coefficients
@@ -329,38 +329,71 @@ def entropy_correlation_vs_npat(region, data, reference):
     N = len(pats)
     within_cross_correlation = defaultdict(list)
     xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
-    for n in range(1,1+N):
+    for n in range(2,1+N):
         for ii in range(int(min(2*binom(N,n),20))):
             subset = [data['af_by_pat'][region][x] for x in sample(pats, n)]
             tmp_af = af_average(subset)
-            withS = -(np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0)
-            ind = (xsS>=0.000)&(~np.isnan(withS))
-            within_cross_correlation[n].append(spearmanr(xsS[ind], withS[ind])[0])
+            minor_af_subset = 1.0 - tmp_af.max(axis=0)
+            fit_cost = data['mut_rate'][region]/(minor_af_subset+af_cutoff)
+            #withS = -(np.log2(tmp_af+1e-10)*tmp_af).sum(axis=0)
+            #ind = (xsS>=0.000)&(~np.isnan(withS))
+            #within_cross_correlation[n].append(spearmanr(xsS[ind], withS[ind])[0])
+            ind = (xsS>=0.000)&(~np.isnan(fit_cost))
+            within_cross_correlation[n].append(spearmanr(xsS[ind], fit_cost[ind])[0])
 
     return within_cross_correlation
 
 
-def SvsNpat(data, reference, figname=None, label_str=''):
+def FitCorr_vs_Npat(data, reference, minor_af, figname=None, label_str=''):
     '''
-    calculate cross-sectional and within patient entropy correlations
+    calculate cross-sectional and fitness cost correlations
     for many subsets of patients and plot the average rank correlation
     against the number of patients used in the within patient average
     '''
     from util import add_panel_label
-    plt.figure()
+    fig, axs = plt.subplots(1,2, figsize=(12,6))
+    plt.suptitle('Nucleotide fitness costs -- '
+                 + ('subtype B' if args.subtype=='B' else 'group M'), fontsize=fs*1.2)
     for region in ['gag', 'pol', 'vif', 'nef']:
-        xsS_within_corr = entropy_correlation_vs_npat(region, data, reference)
+        xsS_within_corr = fitness_correlation_vs_npat(region, data, reference)
         npats = sorted(xsS_within_corr.keys())
         avg_corr = [np.mean(xsS_within_corr[i]) for i in npats]
         std_corr = [np.std(xsS_within_corr[i]) for i in npats]
-        plt.errorbar([1.0/i for i in npats], y=avg_corr,yerr=std_corr, label=region)
+        axs[0].errorbar([1.0/i for i in npats], y=avg_corr,yerr=std_corr, label=region, lw=3)
     plt.legend(fontsize=fs)
-    plt.ylabel('intra-patient/global entropy correlation', fontsize=fs)
-    plt.xlabel('1/number of patients', fontsize=fs)
-    plt.xlim(0,1.1)
-    plt.tick_params(labelsize=fs*0.8)
-    add_panel_label(plt.gca(), label_str, x_offset=-0.10)
-    plt.tight_layout()
+    axs[0].legend(fontsize=fs, loc=2)
+    xsS_str = 'group M diversity' if args.subtype=='any' else 'subtype B diversity'
+    pheno_label = 'fitness cost/'+xsS_str
+    axs[0].set_ylabel(pheno_label+' correlation', fontsize=fs)
+    axs[0].set_xlabel('1/number of patients', fontsize=fs)
+    axs[0].set_xlim(0,0.6)
+    axs[0].tick_params(labelsize=fs*0.8)
+
+    # second panel with explicit correlation
+    region='pol'
+    s = data['mut_rate'][region]/(minor_af[region]+af_cutoff)
+    s[s>1] = 1
+    xsS = np.array([reference.entropy[ii] for ii in reference.annotation[region]])
+    ind = (xsS>=0.000)&(~np.isnan(s))
+    axs[1].scatter(s[ind]+.00003, xsS[ind]+.01, s=20)
+    corr = spearmanr(s[ind], xsS[ind])
+    label_str = region+ r', all patients: '+ r'$\rho='+str(np.round(corr.correlation,2)) + '$'
+    axs[1].text(0.1, 0.9, label_str,
+            transform=axs[1].transAxes, fontsize=fs*1.2)
+
+    axs[1].set_yscale('log')
+    axs[1].set_xscale('log')
+    axs[1].set_ylabel(xsS_str+ ' [bits]', fontsize=fs)
+    axs[1].set_xlabel('fitness cost [1/day]', fontsize=fs)
+    axs[1].set_ylim([0.008, 4])
+    axs[1].set_xlim([0.0001, 2])
+    axs[1].tick_params(labelsize=fs*0.8)
+    axs[1].legend(loc=3, fontsize=fs)
+
+
+    axs[1].text(0.1, 0.9, label_str,
+            transform=axs[1].transAxes, fontsize=fs*1.2)
+    plt.tight_layout(rect=(0,0,1,0.93))
     if figname is not None:
         for ext in ['png', 'svg', 'pdf']:
             plt.savefig(figname+'.'+ext)
@@ -795,7 +828,7 @@ if __name__=="__main__":
                           data['mut_rate'],
                           '../figures/figure_4ABC_st_'+args.subtype)
 
-    # Figure S4 -- confidence of fitness cost estimates
+    # Figure S5 -- confidence of fitness cost estimates
     fig, axs = plt.subplots(4,2, figsize=(12,16))
     for ax, region in zip(axs.flatten(), regions):
         fitnesscost_confidence(region, data, ax=ax)
@@ -814,7 +847,6 @@ if __name__=="__main__":
     # export selection coefficients to file as supplementary info
     export_fitness_cost(data, synnonsyn, args.subtype, reference)
 
-    # plot the correlation of
-    SvsNpat(data, reference,
-          figname='../figures/figure_S4_nuc_entropy_corr_vs_patients_st_'+args.subtype,
-          label_str='A' if args.subtype=='any' else 'B')
+    # FIGURE S4: plot the correlation of fitness costs and diversity
+    FitCorr_vs_Npat(data, reference, minor_af,
+          figname='../figures/figure_S4_nuc_fit_vs_entropy_st_'+args.subtype)
