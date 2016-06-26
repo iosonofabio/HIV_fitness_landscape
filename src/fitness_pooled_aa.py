@@ -290,6 +290,37 @@ def fitness_costs_in_optimal_epis(regions, s, ax=None):
     ax.legend(fontsize=0.8*fs, loc=2)
 
 
+def plot_fraction_associated(regions, s, associations, axs=None, slope=2.0):
+    thres = [-20]+list(np.linspace(-10,-2,5)) + [20]
+    def thres_func(selc, ent):
+        return np.log(selc)+ slope*np.log(ent)
+    for ri,region in enumerate(regions):
+        reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
+        xsS = reference.entropy
+        stmp = np.copy(s[region])
+        stmp[stmp<0.001]=0.001
+        stmp[stmp>1]=1
+        frac = []
+        for upper, lower in zip(thres[1:], thres[:-1]):
+            if ri==0:
+                axs[0].plot(np.exp([upper, upper+4*slope]),
+                           [1, np.exp(-4)], lw=2, alpha=0.3, c='k')
+            ind =  (thres_func(s[region], xsS)<upper)\
+                  &(thres_func(s[region], xsS)>=lower)
+            frac.append((0.5*(upper+lower),
+                         np.mean(thres_func(s[region], xsS)[ind]),
+                         associations[region]['HLA'][ind].mean(),
+                         ind.sum()))
+
+        frac = np.array(frac)
+        print(region, frac)
+        axs[1].plot(frac[:,1], frac[:,2],'-o',label=region)
+    axs[1].legend(loc=2, fontsize=fs*0.8)
+    axs[1].tick_params(labelsize=fs*0.8)
+    axs[1].set_ylabel('fraction HLA associated', fontsize=fs)
+    axs[1].set_xlabel(r'$\alpha \log(\mathrm{fitness}) + \log(\mathrm{diversity})$', fontsize=fs)
+
+
 def fitness_scatter(region, s, associations, reference,
                     annotate_protective=True, fname = None, running_avg=True, ax=None):
     '''
@@ -809,14 +840,15 @@ if __name__=="__main__":
 
     ### FIGURE 5
     fig,axs = plt.subplots(1,2, figsize=(10,5))
-    fitness_costs_in_optimal_epis(['gag', 'nef'], selcoeff, ax=axs[0])
-    add_panel_label(axs[0], 'A', x_offset=-0.15)
+    #fitness_costs_in_optimal_epis(['gag', 'nef'], selcoeff, ax=axs[0])
+    #add_panel_label(axs[0], 'A', x_offset=-0.15)
+    plot_fraction_associated(regions, selcoeff, associations, axs=axs)
     region='nef'
     reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
-    tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference, ax=axs[1])
+    tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference, ax=axs[0])
     add_panel_label(axs[1], 'B', x_offset=-0.15)
-    axs[1].legend(loc=3, fontsize=fs)
-    axs[1].set_ylim([0.03,3])
+    axs[0].legend(loc=3, fontsize=fs)
+    axs[0].set_ylim([0.03,3])
     plt.tight_layout()
     for fmt in ['pdf', 'png', 'svg']:
         plt.savefig('../figures/figure_5_'+region+'_st_'+args.subtype+'.'+fmt)
@@ -895,4 +927,3 @@ if __name__=="__main__":
     PhenoCorr_vs_Npat('entropy', data, total_nonsyn_mutation_rates, associations,
                       figname='../figures/figure_S4_aa_fit_vs_entropy_st_'+args.subtype)
 
-    compare_experiments(data, aa_mutation_rates)
