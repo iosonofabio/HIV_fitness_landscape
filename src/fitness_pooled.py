@@ -713,7 +713,7 @@ def export_fitness_cost(data, synnonsyn, subtype, reference):
         minor_af_bs = av['minor_af_bs']
 
         minor_af_array=np.array(minor_af_bs[region])
-        qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [25, 50, 75]])
+        qtiles = np.vstack([scoreatpercentile(minor_af_array, x, axis=0) for x in [75, 50, 25]])
         scb = (data['mut_rate'][region]/(af_cutoff+qtiles))
 
         ref_seq = [reference.seq[pos] for pos in reference.annotation[region]]

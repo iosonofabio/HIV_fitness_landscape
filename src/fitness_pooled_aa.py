@@ -842,7 +842,8 @@ if __name__=="__main__":
     fig,axs = plt.subplots(1,2, figsize=(10,5))
     #fitness_costs_in_optimal_epis(['gag', 'nef'], selcoeff, ax=axs[0])
     #add_panel_label(axs[0], 'A', x_offset=-0.15)
-    plot_fraction_associated(regions, selcoeff, associations, axs=axs)
+    plot_fraction_associated(regions, selcoeff, associations, axs=axs, slope=2.0)
+    add_panel_label(axs[0], 'A', x_offset=-0.15)
     region='nef'
     reference = HIVreferenceAminoacid(region, refname=aa_ref, subtype = args.subtype)
     tmp, rho, pval =  fitness_scatter(region, selcoeff, associations, reference, ax=axs[0])
