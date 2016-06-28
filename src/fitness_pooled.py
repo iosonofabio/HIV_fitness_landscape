@@ -139,13 +139,22 @@ def collect_weighted_afs(region, patients, reference, cov_min=1000, max_div=0.5,
             final=get_final_state(aft[:,:,patient_to_subtype[:,2]])
 
             if synnonsyn:
+                from hivevo.sequence import alphal
+                Ai = alphal.index('A')
+                Gi = alphal.index('G')
                 # note: this doesn not work for split reading frames.
                 syn_nonsyn_by_pat[pcode] = np.zeros(L, dtype=int)
-                syn_nonsyn_by_pat[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
-                    (p.get_syn_mutations(region, mask_constrained=True).sum(axis=0)>1)[patient_to_subtype[:,2]]
                 syn_nonsyn_by_pat_unconstrained[pcode] = np.zeros(L, dtype=int)
-                syn_nonsyn_by_pat_unconstrained[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
-                    (p.get_syn_mutations(region, mask_constrained=False).sum(axis=0)>1)[patient_to_subtype[:,2]]
+                for mask_constrained, dest in [(True, syn_nonsyn_by_pat),
+                                               (False, syn_nonsyn_by_pat_unconstrained)]:
+                    syn_matrix = p.get_syn_mutations(region, mask_constrained=mask_constrained)
+                    syn_pos = ((syn_matrix.sum(axis=0)>3)|   # 4-fold synonymous OR
+                              ((syn_matrix.sum(axis=0)==2)&   # 2-fold syonymous AND
+                               (syn_matrix[Ai,:]==syn_matrix[Gi,:])))  # A and G both syn or both non-syn
+                                                                    # (C T is then opposite)
+                    dest[pcode][patient_to_subtype[:,0]-patient_to_subtype[0][0]]+=\
+                                            syn_pos[patient_to_subtype[:,2]]
+
             for af, ysi, depth in izip(aft, p.ysi, p.n_templates_dilutions):
                 if ysi<SAMPLE_AGE_CUTOFF:
                     continue
