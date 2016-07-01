@@ -163,7 +163,7 @@ def plot_non_coding_figure(data, minor_af, synnonsyn, reference, fname=None):
                                      synnonsyn=synnonsyn['genomewide'],
                                      ws=8, ws_syn=4, ax=axs[0])
     # add label and dimension to left-most axis, all other are tied to this one
-    ax.set_ylabel('selection coefficient [1/day]', fontsize=fs)
+    ax.set_ylabel('fitness cost [1/day]', fontsize=fs)
     ax.set_ylim(ymin, ymax)
     add_panel_label(ax, 'B', x_offset=-0.15)
 
