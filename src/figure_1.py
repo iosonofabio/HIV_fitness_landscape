@@ -83,7 +83,7 @@ def get_mu_Abram2010(normalize=True, strand='both', with_std=False):
 
 def get_mutation_matrix(data):
     '''
-    Calculate the mutation rate matrix from accumulatio of
+    Calculate the mutation rate matrix from accumulation of
     intra patient diversity via linear regression. Uncertainty
     of the estimates is assessed via boot strapping over patients.
     '''
