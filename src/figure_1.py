@@ -205,7 +205,7 @@ def plot_mutation_increase(data, mu=None, axs=None):
         ax.set_xlim([0,2700])
         ax.set_ylim(0)
         ax.set_xlabel('days since EDI', fontsize=16)
-        ax.set_ylabel('fraction mutated', fontsize=16)
+        ax.set_ylabel('divergence', fontsize=16)
         ax.tick_params(axis='both', labelsize=18)
         ax.grid(True)
 
