@@ -35,7 +35,12 @@ def load_data_saturation():
     fn = '../data/fitness_saturation/fitness_cost_saturation_plot.pickle'
     with open(fn, 'r') as f:
         data = pickle.load(f)
-    return data
+
+    fn = '../data/fitness_saturation/fitness_cost_data_nosweep_Sbins.npz'
+    with np.load(fn) as bin_file:
+        bins = bin_file['bins']
+
+    return data, bins
 
 
 def load_data_KL():
@@ -58,7 +63,7 @@ def load_data_pooled(avg='harmonic'):
     return caf_s
 
 
-def plot_fit(data_sat, data_pooled):
+def plot_fit(data_sat, data_pooled, bins_sat):
     from matplotlib import cm
     from util import add_panel_label
 
@@ -103,7 +108,7 @@ def plot_fit(data_sat, data_pooled):
                )
 
     ax.set_xlabel('days since EDI', fontsize=fs)
-    ax.set_ylabel('average SNP frequency', fontsize=fs)
+    ax.set_ylabel('divergence', fontsize=fs)
     ax.set_xlim(-200, 3200)
     ax.set_ylim(-0.0005, 0.025)
     ax.set_xticks(np.linspace(0, 0.005, 5))
@@ -128,10 +133,11 @@ def plot_fit(data_sat, data_pooled):
 
     x = x[1:]
     y = y[1:]
+    dx = np.array((x-bins_sat[1:-1], bins_sat[2:]-x))
     dy = dy[1:]
-
     ax.errorbar(x, y,
                 yerr=dy,
+                xerr=dx,
                 ls='-',
                 marker='o',
                 lw=2,
@@ -141,9 +147,10 @@ def plot_fit(data_sat, data_pooled):
 
     # B2: pooled
     x = data_pooled['all'][:-1, 0]
-    y = data_pooled['all'][:-1, 1]
-    dy = data_pooled['all_std'][:-1, 1]
-    ax.errorbar(x, y, yerr=dy,
+    y = data_pooled['all'][:-1, -1]
+    dy = data_pooled['all_std'][:-1, -1]
+    dx = np.array((x-data_pooled['all'][:-1, 1], data_pooled['all'][:-1, 2]-x))
+    ax.errorbar(x, y, yerr=dy, xerr=dx,
                 ls='-',
                 marker='o',
                 lw=2,
@@ -261,10 +268,10 @@ if __name__ == '__main__':
                         help='include geometric and arithmetic average')
     args = parser.parse_args()
 
-    data_sat = load_data_saturation()
+    data_sat, bins_sat = load_data_saturation()
     data_pooled = load_data_pooled()
 
-    plot_fit(data_sat, data_pooled)
+    plot_fit(data_sat, data_pooled, bins_sat)
 
     for ext in ['png', 'pdf', 'svg']:
         plt.savefig('../figures/figure_2'+'.'+ext)

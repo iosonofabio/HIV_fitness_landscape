@@ -559,20 +559,20 @@ def fitnesscost_vs_entropy(regions,  minor_af, synnonsyn, mut_rate, reference,
         entropy_thresholds =  np.array(np.linspace(0,A.shape[0],8), int)
         entropy_boundaries = zip(entropy_thresholds[:-1], entropy_thresholds[1:])
         if smoothing=='harmonic':
-            tmp_mean_inv= [(np.median(A[li:ui,0]), np.mean(1.0/A[li:ui,1], axis=0))
+            tmp_mean_inv= [(np.median(A[li:ui,0]), A[li,0], A[ui-1,0], np.mean(1.0/A[li:ui,1], axis=0))
                             for li,ui in entropy_boundaries]
-            avg_sel_coeff[label_str] = np.array([(xsSmed, 1.0/avg_inv)
-                                                for xsSmed, avg_inv in tmp_mean_inv])
+            avg_sel_coeff[label_str] = np.array([(xsSmed, lS, uS, 1.0/avg_inv)
+                                                for xsSmed, lS, uS, avg_inv in tmp_mean_inv])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
                                             (avg_inv**-2)*np.std(1.0/A[li:ui,1], axis=0)/np.sqrt(ui-li))
-                                            for (li,ui), (_a,avg_inv) in zip(entropy_boundaries,tmp_mean_inv)])
+                                            for (li,ui), (_a,lS, uS, avg_inv) in zip(entropy_boundaries,tmp_mean_inv)])
         elif smoothing=='arithmetic':
-            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0], axis=0), np.mean(A[li:ui,1], axis=0))
+            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0], axis=0), A[li,0], A[ui-1,0], np.mean(A[li:ui,1], axis=0))
                                                 for li,ui in entropy_boundaries])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]), np.std(A[li:ui,1], axis=0)/np.sqrt(ui-li))
                                                         for li,ui in entropy_boundaries])
         elif smoothing=='geometric':
-            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), np.exp(np.mean(np.log(A[li:ui,1]), axis=0)))
+            avg_sel_coeff[label_str] = np.array([(np.median(A[li:ui,0]), A[li,0], A[ui-1,0], np.exp(np.mean(np.log(A[li:ui,1]), axis=0)))
                                                  for li,ui in entropy_boundaries])
             avg_sel_coeff[label_str+'_std'] = np.array([(np.median(A[li:ui,0]),
                                               np.exp(np.mean(np.log(A[li:ui,1])))*np.exp(-np.std(np.log(A[li:ui,1]), axis=0)/np.sqrt(ui-li)))
