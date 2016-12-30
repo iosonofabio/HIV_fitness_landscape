@@ -10,7 +10,7 @@ if __name__=="__main__":
     genes = ['gag', 'pol', 'env', 'nef']
     subtype = 'B'
     for gene in genes:
-        fc = pd.read_csv('../data/nuc_'+gene+'_selection_coeffcients_'+subtype+'.tsv', sep='\t', header=1)
+        fc = pd.read_csv('../data/fitness_pooled/nuc_'+gene+'_selection_coeffcients_'+subtype+'.tsv', sep='\t', header=1)
         cons = np.array(fc.loc[:,'consensus'])
         fitness = fc.loc[:,'median']
         fitness_array = []
@@ -47,7 +47,8 @@ if __name__=="__main__":
         #plt.hist(fitness_array[ind], bins=np.logspace(-3,-1,21), weights=1.0/ind.sum()*np.ones(ind.sum()))
         plt.plot(sorted(fitness_array[cpg]), np.linspace(0,1,cpg.sum()), label='to CpG, n='+str(cpg.sum()))
         plt.plot(sorted(fitness_array[not_cpg]), np.linspace(0,1,(not_cpg).sum()), label='not to CpG, n='+str(not_cpg.sum()))
-        print('KS: ', ks_2samp(fitness_array[cpg], fitness_array[not_cpg]))
+        print('KS: ', ks_2samp(fitness_array[cpg], fitness_array[not_cpg]),
+              "to cpg: %1.4f, not: %1.4f"%(np.mean(fitness_array[cpg]), np.mean(fitness_array[not_cpg])))
         plt.xscale('log')
         plt.legend(loc=2)
 
