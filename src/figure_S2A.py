@@ -1,3 +1,10 @@
+# vim: fdm=indent
+'''
+author:     Fabio Zanini
+date:       30/12/16
+content:    Figure S2A on sensitivity of the mutation rate estimates to the
+            entropy threshold and env/non-env.
+'''
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict

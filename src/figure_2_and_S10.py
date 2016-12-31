@@ -2,7 +2,7 @@
 '''
 author:     Fabio Zanini
 date:       15/06/15
-content:    Make figure 2 and figure S12.
+content:    Make figure 2 and figure S10.
             This script plots precomputed data, so you have to run it after the
             following scripts that actually compute the results:
                - fitness_cost_saturation.py (sat fit)
@@ -145,6 +145,26 @@ def plot_fit(data_sat, data_pooled, bins_sat):
                 label='Sat',
                )
 
+    # Annotate with colors from panel A
+    #ax.scatter(x, y,
+    #           marker='o',
+    #           s=130,
+    #           edgecolor=cm.jet(1.0 * np.arange(1, data_to_fit.shape[0]) / data_to_fit.shape[0]),
+    #           facecolor='none',
+    #           lw=2,
+    #           zorder=5,
+    #           )
+    for iS in xrange(1, data_to_fit.shape[0]):
+        ax.annotate('',
+                    xy=(x[iS - 1],
+                        y[iS - 1] * 0.7 if iS != data_to_fit.shape[0] - 1 else 1e-4),
+                    xytext=(x[iS - 1],
+                            y[iS - 1] * 1.0 / 3 if iS != data_to_fit.shape[0] - 1 else 2e-4),
+                    arrowprops={'facecolor': cm.jet(1.0 * iS / data_to_fit.shape[0]),
+                                'edgecolor': 'none',
+                                'shrink': 0.05},
+                    )
+
     # B2: pooled
     x = data_pooled['all'][:-1, 0]
     y = data_pooled['all'][:-1, -1]
@@ -160,7 +180,7 @@ def plot_fit(data_sat, data_pooled, bins_sat):
 
     ax.legend(loc='upper right', fontsize=16)
     ax.set_xlabel('variability in group M [bits]', fontsize=fs)
-    ax.set_ylabel('fitness cost', fontsize=fs)
+    ax.set_ylabel('fitness cost [1/day]', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
     ax.set_xscale('log')
@@ -178,7 +198,7 @@ def plot_fit(data_sat, data_pooled, bins_sat):
     plt.show()
 
 
-def plot_fit_withKL(data_sat, data_KL, data_pooled):
+def plot_fit_withKL(data_sat, data_KL, data_pooled, bins_sat):
     from matplotlib import cm
     from util import add_panel_label
 
@@ -189,24 +209,25 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
     fig, ax = plt.subplots(1, 1,
                            figsize=(fig_width, 0.9 * fig_width))
 
-
     data_to_fit = data_sat['data_to_fit']
     mu = data_sat['mu']
     s = data_sat['s']
 
     # B1: Saturation fit
+    ymin = 0.1
+
     x = np.array(s.index)
     y = np.array(s['s'])
     dy = np.array(s['ds'])
-
-    ymin = 0.1
-
+    dx = np.array((x-bins_sat[:-1], bins_sat[1:]-x))
     x = x[1:]
     y = y[1:]
     dy = dy[1:]
+    dx = dx[:, 1:]
 
     ax.errorbar(x, y,
                 yerr=dy,
+                xerr=dx,
                 ls='-',
                 marker='o',
                 lw=2,
@@ -216,10 +237,16 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
 
     # B2: KL fit
     # Ignore most conserved quantile
-    x = np.array(data_KL.index)  [1:]
-    y = np.array(data_KL['mean'])[1:]
-    dy = np.array(data_KL['std'])[1:]
-    ax.errorbar(x, y, yerr=dy,
+    x = np.array(data_KL.index)
+    y = np.array(data_KL['mean'])
+    dy = np.array(data_KL['std'])
+    dx = np.array((x-bins_sat[1:-1], bins_sat[2:]-x))
+    x = x[1:]
+    y = y[1:]
+    dy = dy[1:]
+    dx = dx[:, 1:]
+
+    ax.errorbar(x, y, yerr=dy, xerr=dx,
                 ls='-',
                 marker='o',
                 lw=2,
@@ -230,19 +257,26 @@ def plot_fit_withKL(data_sat, data_KL, data_pooled):
     # B3: pooled
     for avg, d in data_pooled.iteritems():
         x = d['all'][:-1, 0]
-        y = d['all'][:-1, 1]
+        y = d['all'][:-1, -1]
         dy = d['all_std'][:-1, 1]
-        ax.errorbar(x, y, yerr=dy,
+        dx = np.array((x-d['all'][:-1, 1], d['all'][:-1, 2]-x))
+
+        if avg == 'arithmetic':
+            color = '#aad400'
+        else:
+            color = palette[2]
+
+        ax.errorbar(x, y, yerr=dy, xerr=dx,
                     ls='-',
                     marker='o',
                     lw=2,
-                    color=palette[2],
+                    color=color,
                     label='Pooled - '+avg +' mean',
                    )
 
     ax.legend(loc='lower left', fontsize=fs*0.8)
     ax.set_xlabel('variability in group M [bits]', fontsize=fs)
-    ax.set_ylabel('fitness cost', fontsize=fs)
+    ax.set_ylabel('fitness cost [1/day]', fontsize=fs)
     ax.set_xlim(0.9e-3, 2.5)
     ax.set_ylim(9e-5, 0.11)
     ax.set_xscale('log')
@@ -285,6 +319,6 @@ if __name__ == '__main__':
             data_pooled = {avg:load_data_pooled(avg=avg)
                         for avg in ['harmonic']}
 
-        plot_fit_withKL(data_sat, data_KL, data_pooled)
+        plot_fit_withKL(data_sat, data_KL, data_pooled, bins_sat)
         for ext in ['png', 'pdf', 'svg']:
-            plt.savefig('../figures/figure_S12'+'.'+ext)
+            plt.savefig('../figures/figure_S10'+'.'+ext)
